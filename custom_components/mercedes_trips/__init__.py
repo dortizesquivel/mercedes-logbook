@@ -69,7 +69,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.http.register_view(TripsListView)
     hass.http.register_view(TripDetailView)
 
-    # Schedule resource registration after HA is fully up
+    # Inject JS into frontend — tried in order, first success wins
+    _inject_frontend_js(hass)
+
+    # Also persist in Lovelace storage as fallback
     @callback
     def _on_ha_started(_event=None) -> None:
         hass.async_create_task(_async_ensure_lovelace_resource(hass))
@@ -84,6 +87,44 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     _LOGGER.info("Mercedes Trips: loaded — card at %s", FRONTEND_URL)
     return True
+
+
+def _inject_frontend_js(hass: HomeAssistant) -> None:
+    """Inject the card JS into HA frontend using multiple methods."""
+    # Method A: add_extra_js_url (HA 2023+, used by browser_mod and similar)
+    try:
+        from homeassistant.components.frontend import add_extra_js_url  # noqa: PLC0415
+        add_extra_js_url(hass, FRONTEND_URL, False)
+        _LOGGER.info("Mercedes Trips: JS inyectado via add_extra_js_url → %s", FRONTEND_URL)
+        return
+    except (ImportError, Exception) as exc:
+        _LOGGER.debug("Mercedes Trips: add_extra_js_url no disponible (%s)", exc)
+
+    # Method B: async_register_extra_js_url (some HA versions)
+    try:
+        from homeassistant.components.frontend import async_register_extra_js_url  # noqa: PLC0415
+        async_register_extra_js_url(hass, FRONTEND_URL)
+        _LOGGER.info("Mercedes Trips: JS inyectado via async_register_extra_js_url → %s", FRONTEND_URL)
+        return
+    except (ImportError, Exception) as exc:
+        _LOGGER.debug("Mercedes Trips: async_register_extra_js_url no disponible (%s)", exc)
+
+    # Method C: direct hass.data manipulation (fallback for edge cases)
+    try:
+        from homeassistant.components.frontend import KEY_EXTRA_JS_URL_ES5  # noqa: PLC0415
+        extra = hass.data.setdefault(KEY_EXTRA_JS_URL_ES5, [])
+        if FRONTEND_URL not in extra:
+            extra.append(FRONTEND_URL)
+        _LOGGER.info("Mercedes Trips: JS inyectado via KEY_EXTRA_JS_URL_ES5 → %s", FRONTEND_URL)
+        return
+    except (ImportError, Exception) as exc:
+        _LOGGER.debug("Mercedes Trips: KEY_EXTRA_JS_URL_ES5 no disponible (%s)", exc)
+
+    _LOGGER.warning(
+        "Mercedes Trips: no se pudo inyectar el JS automáticamente. "
+        "Añade manualmente el recurso Lovelace: %s (JavaScript Module)",
+        FRONTEND_URL,
+    )
 
 
 async def _async_ensure_lovelace_resource(hass: HomeAssistant) -> None:
