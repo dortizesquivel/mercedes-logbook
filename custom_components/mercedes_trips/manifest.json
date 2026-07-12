@@ -1,0 +1,11 @@
+{
+  "domain": "mercedes_trips",
+  "name": "Mercedes Trips",
+  "documentation": "https://github.com/dortizesquivel/mercedes-trips-ha",
+  "requirements": [],
+  "dependencies": [],
+  "codeowners": ["@dortizesquivel"],
+  "version": "1.0.0",
+  "iot_class": "local_push",
+  "config_flow": true
+}

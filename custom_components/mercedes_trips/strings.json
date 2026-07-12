@@ -1,0 +1,22 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Mercedes Trips",
+        "description": "Configura el registro de trayectos para tu Mercedes EQB.",
+        "data": {
+          "odometer_entity": "Sensor de odómetro",
+          "tracker_entity": "Device tracker (GPS)",
+          "soc_entity": "Sensor de batería (SoC %)",
+          "range_entity": "Sensor de autonomía eléctrica",
+          "battery_capacity_kwh": "Capacidad útil de batería (kWh)",
+          "inactivity_timeout_min": "Minutos de inactividad para cerrar trayecto",
+          "min_trip_distance_km": "Distancia mínima de trayecto (km)"
+        }
+      }
+    },
+    "error": {
+      "entity_not_found": "Entidad no encontrada en Home Assistant"
+    }
+  }
+}

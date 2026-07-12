@@ -1,0 +1,7 @@
+{
+  "name": "Mercedes Trips",
+  "content_in_root": false,
+  "homeassistant": "2024.1.0",
+  "filename": "mercedes-trips-card.js",
+  "render_readme": true
+}
