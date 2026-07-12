@@ -9,6 +9,8 @@ Automatically log every trip made with your Mercedes electric or PHEV vehicle �
 
 Includes a **Lovelace card** with a multi-trip interactive map, date/hour filters, and monthly statistics.
 
+![Mercedes Trips card screenshot](docs/screenshot.png)
+
 ---
 
 ## ⚠️ Required dependency: mbapi2020
