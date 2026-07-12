@@ -1,7 +1,7 @@
 {
   "domain": "mercedes_trips",
   "name": "Mercedes Trips",
-  "documentation": "https://github.com/dortizesquivel/mercedes-trips-ha",
+  "documentation": "https://github.com/dortizesquivel/mercedes-logbook",
   "requirements": [],
   "dependencies": [],
   "codeowners": ["@dortizesquivel"],
