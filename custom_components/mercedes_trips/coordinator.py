@@ -417,7 +417,6 @@ class TripCoordinator:
             soc,
         )
 
-    @callback
     async def _periodic_waypoint(self, _now=None) -> None:
         if self._active_trip is None:
             return
@@ -435,7 +434,6 @@ class TripCoordinator:
             self._active_trip["waypoints"] = waypoints
             await self._store.async_save(self._active_trip)
 
-    @callback
     async def _periodic_inactivity_check(self, _now=None) -> None:
         if self._active_trip is None:
             return
