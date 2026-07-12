@@ -128,13 +128,23 @@ class MercedesTripsCard extends HTMLElement {
           height: 100%;
         }
 
-        /* Leaflet needs these inside the shadow root */
-        .leaflet-container { background: #ddd; outline: 0; cursor: grab; }
+        /* ── Full Leaflet CSS inlined — CDN link is a bonus; these rules are
+           the authoritative source so HA's CSP cannot block them.            ── */
+
+        /* Core: without position:relative on the container, tiles escape */
+        .leaflet-container {
+          position: relative !important;
+          overflow: hidden !important;
+          background: #ddd;
+          outline: 0;
+          cursor: grab;
+          -webkit-tap-highlight-color: transparent;
+        }
         .leaflet-container:focus { outline: none; }
         .leaflet-container a { color: #0078A8; }
         .leaflet-container a.leaflet-active { outline: 2px solid orange; }
-        .leaflet-zoom-animated { -webkit-transition: -webkit-transform 0.25s cubic-bezier(0,0,0.25,1); -moz-transition: -moz-transform 0.25s cubic-bezier(0,0,0.25,1); -o-transition: -o-transform 0.25s cubic-bezier(0,0,0.25,1); transition: transform 0.25s cubic-bezier(0,0,0.25,1); }
-        .leaflet-pan-anim .leaflet-tile, .leaflet-zoom-anim .leaflet-tile { -webkit-transition: none; -moz-transition: none; -o-transition: none; transition: none; }
+
+        /* Pane positioning — every pane must be absolute inside the container */
         .leaflet-map-pane,
         .leaflet-tile,
         .leaflet-marker-icon,
@@ -146,43 +156,71 @@ class MercedesTripsCard extends HTMLElement {
         .leaflet-popup-pane,
         .leaflet-map-pane canvas,
         .leaflet-map-pane svg { position: absolute; }
-        .leaflet-map-pane { z-index: 2; }
-        .leaflet-tile-pane { z-index: 2; }
+
+        .leaflet-map-pane { z-index: 2; top: 0; left: 0; }
+        .leaflet-tile-pane    { z-index: 2; }
         .leaflet-overlay-pane { z-index: 4; }
-        .leaflet-shadow-pane { z-index: 5; }
-        .leaflet-marker-pane { z-index: 6; }
+        .leaflet-shadow-pane  { z-index: 5; }
+        .leaflet-marker-pane  { z-index: 6; }
         .leaflet-tooltip-pane { z-index: 6; }
-        .leaflet-popup-pane { z-index: 7; }
-        .leaflet-zoom-box { width: 0; height: 0; box-sizing: border-box; z-index: 800; }
-        .leaflet-map-pane,
+        .leaflet-popup-pane   { z-index: 7; }
+
         .leaflet-pane { position: absolute; top: 0; left: 0; }
         .leaflet-pane > svg,
         .leaflet-pane > canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+
         .leaflet-tile-container { pointer-events: none; }
-        .leaflet-tile { image-rendering: -webkit-optimize-contrast; position: absolute; }
-        .leaflet-zoom-anim .leaflet-zoom-animated { will-change: transform; }
-        .leaflet-control-zoom { border: 2px solid rgba(0,0,0,0.2); }
-        .leaflet-control { position: relative; z-index: 800; pointer-events: visiblePainted; pointer-events: auto; }
+        .leaflet-tile { position: absolute; image-rendering: auto; }
+        .leaflet-zoom-box { width: 0; height: 0; box-sizing: border-box; z-index: 800; }
+
+        /* Controls */
+        .leaflet-control { position: relative; z-index: 800; pointer-events: auto; float: left; clear: both; }
+        .leaflet-bottom .leaflet-control { margin-bottom: 5px; }
+        .leaflet-top    .leaflet-control { margin-top: 5px; }
+        .leaflet-left   .leaflet-control { margin-left: 10px; }
+        .leaflet-right  .leaflet-control { margin-right: 10px; }
+
         .leaflet-bottom, .leaflet-top { position: absolute; z-index: 1000; pointer-events: none; }
-        .leaflet-top { top: 0; }
+        .leaflet-top    { top: 0; }
         .leaflet-bottom { bottom: 0; }
-        .leaflet-left { left: 0; }
-        .leaflet-right { right: 0; }
-        .leaflet-control-zoom a { text-align: center; line-height: 26px; display: block; text-decoration: none; color: black; }
-        .leaflet-touch .leaflet-control-zoom a { font-size: 22px; line-height: 30px; }
-        .leaflet-bar a, .leaflet-bar a:hover { background-color: #fff; border-bottom: 1px solid #ccc; width: 26px; height: 26px; display: block; text-align: center; text-decoration: none; color: black; }
+        .leaflet-left   { left: 0; }
+        .leaflet-right  { right: 0; }
+
+        .leaflet-control-zoom { border: 2px solid rgba(0,0,0,0.2); border-radius: 4px; }
+        .leaflet-bar a, .leaflet-bar a:hover {
+          background-color: #fff; border-bottom: 1px solid #ccc;
+          width: 26px; height: 26px; display: block;
+          text-align: center; line-height: 26px;
+          text-decoration: none; color: black;
+        }
         .leaflet-bar a:first-child { border-top-left-radius: 4px; border-top-right-radius: 4px; }
-        .leaflet-bar a:last-child { border-bottom-left-radius: 4px; border-bottom-right-radius: 4px; border-bottom: none; }
+        .leaflet-bar a:last-child  { border-bottom-left-radius: 4px; border-bottom-right-radius: 4px; border-bottom: none; }
         .leaflet-bar a.leaflet-disabled { cursor: default; background-color: #f4f4f4; color: #bbb; }
-        .leaflet-touch .leaflet-bar a { width: 30px; height: 30px; line-height: 30px; }
-        .leaflet-attribution-flag { display: inline !important; vertical-align: baseline !important; width: 1em; height: 0.6669em; }
-        .leaflet-control-attribution, .leaflet-control-scale-line { padding: 0 5px; background: white; background: rgba(255,255,255,0.8); box-shadow: 0 0 5px #bbb; }
-        .leaflet-control-attribution { font-size: 11px; white-space: nowrap; overflow: hidden; }
+
+        /* Animations */
+        .leaflet-zoom-animated { transition: transform 0.25s cubic-bezier(0,0,0.25,1); }
+        .leaflet-pan-anim  .leaflet-tile,
+        .leaflet-zoom-anim .leaflet-tile { transition: none; }
+        .leaflet-zoom-anim .leaflet-zoom-animated { will-change: transform; }
+
+        /* Attribution / tooltip */
+        .leaflet-control-attribution, .leaflet-control-scale-line {
+          padding: 0 5px; background: rgba(255,255,255,0.8); box-shadow: 0 0 5px #bbb;
+          font-size: 11px; white-space: nowrap; overflow: hidden;
+        }
         .leaflet-control-attribution a { text-decoration: none; }
         .leaflet-control-attribution a:hover { text-decoration: underline; }
-        .leaflet-container .leaflet-control-attribution,
-        .leaflet-container .leaflet-control-scale { background: #fff; background: rgba(255, 255, 255, 0.7); }
-        .leaflet-tooltip { background-color: #fff; border: 1px solid #fff; border-radius: 3px; padding: 6px; white-space: nowrap; color: #333; font-size: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.4); }
+
+        .leaflet-tooltip {
+          position: absolute; background: #fff; border: 1px solid #fff;
+          border-radius: 3px; padding: 6px; white-space: nowrap;
+          color: #333; font-size: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.4);
+          pointer-events: none; z-index: 900;
+        }
+
+        /* Fade animation */
+        .leaflet-fade-anim .leaflet-popup { opacity: 0; transition: opacity 0.2s linear; }
+        .leaflet-fade-anim .leaflet-map-pane .leaflet-popup { opacity: 1; }
 
         .trip-list { max-height: 320px; overflow-y: auto; }
         .trip-row {
@@ -250,13 +288,31 @@ class MercedesTripsCard extends HTMLElement {
     this.shadowRoot.getElementById("btn-reset").addEventListener("click", () => this._resetFilter());
   }
 
-  _scheduleMapInit() {
-    // Wait for the shadow DOM to paint and the Leaflet CSS link to load
-    // before initialising the map so dimensions are settled.
+  connectedCallback() {
+    // HA sometimes re-attaches the element after navigation. Re-validate the
+    // map size so tiles repaint correctly, and retry init if it never ran.
+    if (this._map) {
+      requestAnimationFrame(() => this._map && this._map.invalidateSize());
+    } else if (this._rendered) {
+      this._scheduleMapInit();
+    }
+  }
+
+  _scheduleMapInit(attempt = 0) {
+    // Retry until the shadow-DOM container has non-zero dimensions.
+    // HA can set `hass` (triggering _init) before the element is visible,
+    // so Leaflet would init on a 0×0 box and place tiles in wrong positions.
     requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        this._initMap();
-      });
+      const el = this.shadowRoot && this.shadowRoot.getElementById("map");
+      if (!el) return;
+      const { width, height } = el.getBoundingClientRect();
+      if (width === 0 || height === 0) {
+        if (attempt < 30) {
+          setTimeout(() => this._scheduleMapInit(attempt + 1), 150);
+        }
+        return;
+      }
+      this._initMap();
     });
   }
 
@@ -264,8 +320,15 @@ class MercedesTripsCard extends HTMLElement {
     if (this._map) return;
     if (!window.L) return;
 
-    const el = this.shadowRoot.getElementById("map");
+    const el = this.shadowRoot && this.shadowRoot.getElementById("map");
     if (!el) return;
+
+    // Final dimension guard
+    const { width, height } = el.getBoundingClientRect();
+    if (width === 0 || height === 0) {
+      setTimeout(() => this._scheduleMapInit(), 200);
+      return;
+    }
 
     this._map = window.L.map(el, {
       zoomControl: true,
@@ -280,10 +343,9 @@ class MercedesTripsCard extends HTMLElement {
     this._map.invalidateSize();
 
     if (window.ResizeObserver) {
-      const ro = new ResizeObserver(() => {
+      new ResizeObserver(() => {
         if (this._map) this._map.invalidateSize();
-      });
-      ro.observe(el);
+      }).observe(el);
     }
 
     // If data was already fetched before map was ready, draw now

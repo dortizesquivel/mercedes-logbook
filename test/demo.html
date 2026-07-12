@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mercedes Trips Card — Demo</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      background: #111;
+      font-family: sans-serif;
+      min-height: 100vh;
+    }
+    .container {
+      max-width: 520px;
+      margin: 0 auto;
+    }
+    h1 {
+      color: #fff;
+      font-size: 1rem;
+      margin-bottom: 16px;
+      opacity: 0.6;
+    }
+    mercedes-trips-card {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Mercedes Trips — Local Demo</h1>
+    <mercedes-trips-card></mercedes-trips-card>
+  </div>
+
+  <script>
+    // ── Mock fetch so the card gets realistic data without a real HA instance ──
+    const MOCK_TRIPS = [
+      {
+        id: 1,
+        start_time: "2026-07-10T08:15:00",
+        end_time:   "2026-07-10T08:52:00",
+        start_odometer: 14230, end_odometer: 14265,
+        distance_km: 35.2,
+        start_soc: 88, end_soc: 74, soc_used: 14,
+        kwh_used: 7.1, avg_kwh_per_100km: 20.2,
+        start_lat: 36.1408, start_lon: -5.4525,
+        end_lat:   36.7213, end_lon:  -4.4214,
+        start_address: "Algeciras, Cádiz",
+        end_address:   "Málaga, Málaga",
+        waypoints: [
+          [36.1408, -5.4525, "2026-07-10T08:15:00"],
+          [36.2500, -5.2800, "2026-07-10T08:22:00"],
+          [36.3800, -5.0200, "2026-07-10T08:30:00"],
+          [36.5200, -4.8000, "2026-07-10T08:40:00"],
+          [36.6400, -4.6000, "2026-07-10T08:48:00"],
+          [36.7213, -4.4214, "2026-07-10T08:52:00"],
+        ],
+      },
+      {
+        id: 2,
+        start_time: "2026-07-11T10:05:00",
+        end_time:   "2026-07-11T10:28:00",
+        start_odometer: 14265, end_odometer: 14279,
+        distance_km: 14.0,
+        start_soc: 72, end_soc: 66, soc_used: 6,
+        kwh_used: 2.9, avg_kwh_per_100km: 20.7,
+        start_lat: 36.7213, start_lon: -4.4214,
+        end_lat:   36.6500, end_lon:  -4.5100,
+        start_address: "Málaga Centro",
+        end_address:   "Torremolinos",
+        waypoints: [
+          [36.7213, -4.4214, "2026-07-11T10:05:00"],
+          [36.7000, -4.4500, "2026-07-11T10:12:00"],
+          [36.6700, -4.4800, "2026-07-11T10:20:00"],
+          [36.6500, -4.5100, "2026-07-11T10:28:00"],
+        ],
+      },
+      {
+        id: 3,
+        start_time: "2026-07-12T07:30:00",
+        end_time:   "2026-07-12T08:15:00",
+        start_odometer: 14279, end_odometer: 14307,
+        distance_km: 28.0,
+        start_soc: 65, end_soc: 55, soc_used: 10,
+        kwh_used: 5.3, avg_kwh_per_100km: 18.9,
+        start_lat: 36.6500, start_lon: -4.5100,
+        end_lat:   36.5144, end_lon:  -6.2894,
+        start_address: "Torremolinos",
+        end_address:   "Jerez de la Frontera",
+        waypoints: [
+          [36.6500, -4.5100, "2026-07-12T07:30:00"],
+          [36.6000, -4.9000, "2026-07-12T07:42:00"],
+          [36.5500, -5.3000, "2026-07-12T07:55:00"],
+          [36.5000, -5.8000, "2026-07-12T08:08:00"],
+          [36.5144, -6.2894, "2026-07-12T08:15:00"],
+        ],
+      },
+    ];
+
+    const MOCK_RESPONSE = {
+      trips: MOCK_TRIPS,
+      stats: {
+        distance_this_month: 77.2,
+        distance_this_year:  342.5,
+        kwh_this_month:      15.3,
+        avg_kwh_per_100km:   19.8,
+        total_trips:         3,
+      },
+      active_trip: null,
+    };
+
+    const _realFetch = window.fetch.bind(window);
+    window.fetch = function(url, opts) {
+      if (url.startsWith("/api/mercedes_trips/trips")) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(MOCK_RESPONSE),
+        });
+      }
+      return _realFetch(url, opts);
+    };
+  </script>
+
+  <!-- Load the card JS -->
+  <script src="../custom_components/mercedes_trips/frontend/mercedes-trips-card.js"></script>
+
+  <script>
+    // Give the card a fake hass object so it initialises
+    const card = document.querySelector("mercedes-trips-card");
+    card.setConfig({});
+    card.hass = {
+      auth: { data: { access_token: "demo-token" } },
+      states: {},
+    };
+  </script>
+</body>
+</html>
