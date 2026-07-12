@@ -126,13 +126,18 @@
   <script src="../custom_components/mercedes_trips/frontend/mercedes-trips-card.js"></script>
 
   <script>
-    // Give the card a fake hass object so it initialises
-    const card = document.querySelector("mercedes-trips-card");
+    // Simulate HA's exact initialization order:
+    // 1) createElement (not yet in DOM)
+    // 2) setConfig
+    // 3) hass= (triggers _init → _buildDOM → scheduleMapInit while 0×0)
+    // 4) append to DOM (triggers connectedCallback)
+    const card = document.createElement("mercedes-trips-card");
     card.setConfig({});
     card.hass = {
       auth: { data: { access_token: "demo-token" } },
       states: {},
     };
+    document.querySelector(".container").appendChild(card);
   </script>
 </body>
 </html>

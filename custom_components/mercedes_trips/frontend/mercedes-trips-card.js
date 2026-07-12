@@ -342,6 +342,16 @@ class MercedesTripsCard extends HTMLElement {
 
     this._map.invalidateSize({ animate: false });
 
+    // Diagnostics: log after Leaflet fully initializes so we can see real state
+    const r = el.getBoundingClientRect();
+    console.group("[Mercedes Trips] map init");
+    console.log(`rect: ${r.width}x${r.height} @ (${Math.round(r.x)}, ${Math.round(r.y)})`);
+    console.log("position:", el.style.position || getComputedStyle(el).position);
+    console.log("overflow:", el.style.overflow || getComputedStyle(el).overflow);
+    console.log("mapSize:", JSON.stringify(this._map.getSize()));
+    console.log("center:", JSON.stringify(this._map.getCenter()));
+    console.groupEnd();
+
     // Re-invalidate at several intervals to cover:
     // - HA card editor dialog open animation
     // - Lovelace panel transition
@@ -356,6 +366,30 @@ class MercedesTripsCard extends HTMLElement {
         const { width, height } = entries[0].contentRect;
         if (width > 0 && height > 0) this._map.invalidateSize({ animate: false });
       }).observe(el);
+    }
+
+    // IntersectionObserver: re-validate when card enters viewport after
+    // being off-screen (e.g. HA tab switch, panel slide-in animation).
+    if (window.IntersectionObserver) {
+      new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting && this._map) {
+            this._map.invalidateSize({ animate: false });
+          }
+        });
+      }, { threshold: 0.1 }).observe(this);
+    }
+
+    // Double-click on map container forces full re-init (emergency escape hatch)
+    const container = this.shadowRoot.getElementById("map-container");
+    if (container) {
+      container.addEventListener("dblclick", () => {
+        if (this._map) {
+          this._map.remove();
+          this._map = null;
+          this._scheduleMapInit();
+        }
+      });
     }
 
     // If data was already fetched before map was ready, draw now
