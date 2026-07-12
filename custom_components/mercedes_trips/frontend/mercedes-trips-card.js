@@ -89,20 +89,27 @@ class MercedesTripsCard extends HTMLElement {
     this.shadowRoot.innerHTML = `
       <style>
         :host { display: block; }
-        .card { background: var(--card-background-color, #1c1c1e); border-radius: 12px; overflow: hidden; font-family: var(--primary-font-family, sans-serif); color: var(--primary-text-color, #fff); }
+        .card { background: var(--card-background-color, #1c1c1e); border-radius: 12px; overflow: hidden; font-family: var(--primary-font-family, sans-serif); color: var(--primary-text-color, #fff); position: relative; }
         .header { padding: 16px 20px 12px; border-bottom: 1px solid rgba(255,255,255,0.08); }
         .header h2 { margin: 0; font-size: 1.1rem; font-weight: 600; display: flex; align-items: center; gap: 8px; }
-        .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 12px 20px; }
+        .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 12px 20px; position: relative; z-index: 1; }
         .stat { background: rgba(255,255,255,0.06); border-radius: 8px; padding: 10px 12px; }
         .stat-value { font-size: 1.3rem; font-weight: 700; }
         .stat-label { font-size: 0.7rem; color: var(--secondary-text-color, #aaa); margin-top: 2px; }
-        .filters { padding: 10px 20px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+        .filters { padding: 10px 20px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; position: relative; z-index: 1; }
         .filters label { font-size: 0.75rem; color: var(--secondary-text-color, #aaa); }
         .filters input[type=date], .filters input[type=number] { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; color: inherit; padding: 4px 8px; font-size: 0.8rem; width: 120px; }
         .filters input[type=number] { width: 52px; }
         .btn { background: var(--primary-color, #03a9f4); color: #fff; border: none; border-radius: 6px; padding: 5px 14px; cursor: pointer; font-size: 0.8rem; }
-        #map { width: 100%; height: 380px; }
-        .trip-list { max-height: 320px; overflow-y: auto; }
+        /* Critical Leaflet fixes for Shadow DOM */
+        .map-wrap { width: 100%; height: 380px; position: relative; overflow: hidden; z-index: 0; }
+        #map { width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
+        .leaflet-container { font-family: inherit; }
+        .leaflet-pane, .leaflet-pane > svg, .leaflet-pane > canvas,
+        .leaflet-zoom-box, .leaflet-image-layer, .leaflet-layer { position: absolute; top: 0; left: 0; }
+        .leaflet-tile-container { pointer-events: none; }
+        .leaflet-tile { filter: none; }
+        .trip-list { max-height: 320px; overflow-y: auto; position: relative; z-index: 1; }
         .trip-row { display: grid; grid-template-columns: 32px 1fr 72px 72px 72px; gap: 6px; align-items: center; padding: 8px 20px; border-bottom: 1px solid rgba(255,255,255,0.05); cursor: pointer; transition: background .15s; font-size: 0.8rem; }
         .trip-row:hover { background: rgba(255,255,255,0.06); }
         .trip-row.selected { background: rgba(255,255,255,0.12); }
@@ -111,8 +118,8 @@ class MercedesTripsCard extends HTMLElement {
         .trip-route-main { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .trip-route-sub { font-size: 0.7rem; color: var(--secondary-text-color, #aaa); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .trip-num { text-align: right; }
-        .trip-list-header { display: grid; grid-template-columns: 32px 1fr 72px 72px 72px; gap: 6px; padding: 6px 20px; font-size: 0.7rem; color: var(--secondary-text-color, #aaa); border-bottom: 1px solid rgba(255,255,255,0.1); }
-        .detail-panel { padding: 12px 20px; background: rgba(255,255,255,0.04); border-top: 1px solid rgba(255,255,255,0.08); font-size: 0.82rem; display: none; }
+        .trip-list-header { display: grid; grid-template-columns: 32px 1fr 72px 72px 72px; gap: 6px; padding: 6px 20px; font-size: 0.7rem; color: var(--secondary-text-color, #aaa); border-bottom: 1px solid rgba(255,255,255,0.1); position: relative; z-index: 1; }
+        .detail-panel { padding: 12px 20px; background: rgba(255,255,255,0.04); border-top: 1px solid rgba(255,255,255,0.08); font-size: 0.82rem; display: none; position: relative; z-index: 1; }
         .detail-panel.visible { display: block; }
         .detail-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
         .detail-item label { font-size: 0.7rem; color: var(--secondary-text-color, #aaa); }
@@ -138,7 +145,7 @@ class MercedesTripsCard extends HTMLElement {
           <button class="btn" id="btn-filter">Filtrar</button>
           <button class="btn" id="btn-reset" style="background:rgba(255,255,255,0.12)">Reset</button>
         </div>
-        <div id="map"></div>
+        <div class="map-wrap"><div id="map"></div></div>
         <div class="trip-list-header">
           <div></div><div>Ruta</div><div class="trip-num">km</div><div class="trip-num">kWh</div><div class="trip-num">Fecha</div>
         </div>
@@ -148,19 +155,33 @@ class MercedesTripsCard extends HTMLElement {
     `;
 
     this._mapEl = this.shadowRoot.getElementById("map");
-    this._initMap();
+    // Init map after two animation frames so Shadow DOM dimensions are settled
+    requestAnimationFrame(() => requestAnimationFrame(() => this._initMap()));
 
     this.shadowRoot.getElementById("btn-filter").addEventListener("click", () => this._applyFilter());
     this.shadowRoot.getElementById("btn-reset").addEventListener("click", () => this._resetFilter());
   }
 
   _initMap() {
-    if (!window.L) return;
-    this._map = window.L.map(this._mapEl, { zoomControl: true }).setView([40.4, -3.7], 6);
+    if (!window.L || this._map) return;
+    const el = this._mapEl;
+    if (!el) return;
+
+    this._map = window.L.map(el, {
+      zoomControl: true,
+      preferCanvas: true,
+    }).setView([40.4, -3.7], 6);
+
     window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: "© OpenStreetMap",
       maxZoom: 19,
     }).addTo(this._map);
+
+    // Ensure correct size after init and whenever the card resizes
+    this._map.invalidateSize();
+    if (window.ResizeObserver) {
+      new ResizeObserver(() => this._map && this._map.invalidateSize()).observe(el);
+    }
   }
 
   _applyFilter() {
