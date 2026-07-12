@@ -356,7 +356,13 @@ class TripCoordinator:
             return None
         return _safe_float(state.state)
 
-    def _get_gps(self) -> tuple[float, float] | None:
+    def _get_gps(self) -> tuple[float, float, float | None, str | None] | None:
+        """Return (lat, lon, heading_degrees, gps_timestamp) from the device tracker.
+
+        heading and gps_timestamp come from mbapi2020 attributes positionHeading
+        and timestamp — the actual GPS fix time reported by the car, which is more
+        accurate than dt_util.now() for waypoint timestamps.
+        """
         state = self.hass.states.get(self._config[CONF_TRACKER_ENTITY])
         if state is None or state.state in ("unknown", "unavailable"):
             return None
@@ -365,7 +371,9 @@ class TripCoordinator:
         lon = _safe_float(attrs.get("longitude"))
         if lat is None or lon is None:
             return None
-        return lat, lon
+        heading = _safe_float(attrs.get("positionHeading"))
+        gps_ts: str | None = attrs.get("timestamp")  # ISO from Mercedes API
+        return lat, lon, heading, gps_ts
 
     # ── Trip detection ────────────────────────────────────────────────────────
 
@@ -400,6 +408,11 @@ class TripCoordinator:
         gps = self._get_gps()
         soc = self._get_soc()
 
+        first_waypoint = []
+        if gps:
+            lat, lon, heading, gps_ts = gps
+            first_waypoint = [[lat, lon, gps_ts or now_iso, heading]]
+
         self._active_trip = {
             "start_time": now_iso,
             "start_odometer": odometer,
@@ -408,7 +421,7 @@ class TripCoordinator:
             "start_lat": gps[0] if gps else None,
             "start_lon": gps[1] if gps else None,
             "last_movement": now_iso,
-            "waypoints": [[gps[0], gps[1], now_iso]] if gps else [],
+            "waypoints": first_waypoint,
         }
         await self._store.async_save(self._active_trip)
         _LOGGER.info(
@@ -424,13 +437,14 @@ class TripCoordinator:
             gps = self._get_gps()
             if gps is None:
                 return
+            lat, lon, heading, gps_ts = gps
             waypoints = self._active_trip.get("waypoints", [])
-            now_iso = dt_util.now().isoformat()
             if waypoints:
-                last_lat, last_lon, _ = waypoints[-1]
-                if _haversine_km(last_lat, last_lon, gps[0], gps[1]) < 0.02:
+                last_lat, last_lon = waypoints[-1][0], waypoints[-1][1]
+                if _haversine_km(last_lat, last_lon, lat, lon) < 0.02:
                     return  # Not moved enough to record a new waypoint
-            waypoints.append([gps[0], gps[1], now_iso])
+            ts = gps_ts or dt_util.now().isoformat()
+            waypoints.append([lat, lon, ts, heading])
             self._active_trip["waypoints"] = waypoints
             await self._store.async_save(self._active_trip)
 
@@ -520,6 +534,8 @@ class TripCoordinator:
 
         end_lat = gps[0] if gps else None
         end_lon = gps[1] if gps else None
+        end_heading = gps[2] if gps else None
+        end_gps_ts = gps[3] if gps else None
 
         start_address = ""
         end_address = ""
@@ -530,8 +546,8 @@ class TripCoordinator:
 
         # Add final waypoint
         waypoints = trip.get("waypoints", [])
-        if gps and (not waypoints or _haversine_km(waypoints[-1][0], waypoints[-1][1], gps[0], gps[1]) > 0.02):
-            waypoints.append([gps[0], gps[1], now_iso])
+        if gps and (not waypoints or _haversine_km(waypoints[-1][0], waypoints[-1][1], end_lat, end_lon) > 0.02):
+            waypoints.append([end_lat, end_lon, end_gps_ts or now_iso, end_heading])
 
         completed = {
             "start_time": trip["start_time"],
