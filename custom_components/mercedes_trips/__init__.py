@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from pathlib import Path
 
 from aiohttp import web
@@ -8,6 +9,7 @@ from homeassistant.components.http import HomeAssistantView
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.typing import ConfigType
 
 from .const import DOMAIN
@@ -19,18 +21,18 @@ _LOGGER = logging.getLogger(__name__)
 PLATFORMS = ["sensor"]
 
 FRONTEND_SCRIPT = "mercedes-trips-card.js"
-# URL served directly by this integration (fallback)
-FRONTEND_URL_LOCAL = f"/{DOMAIN}/{FRONTEND_SCRIPT}"
-# URL when installed as HACS Frontend plugin
-FRONTEND_URL_HACS = f"/hacsfiles/mercedes-logbook/{FRONTEND_SCRIPT}"
-
+FRONTEND_URL = f"/{DOMAIN}/{FRONTEND_SCRIPT}"
 FRONTEND_PATH = Path(__file__).parent / "frontend" / FRONTEND_SCRIPT
+
+# Same key/version HA uses internally for lovelace resources
+_LOVELACE_STORAGE_KEY = "lovelace_resources"
+_LOVELACE_STORAGE_VERSION = 1
 
 
 class MercedesTripsCardView(HomeAssistantView):
-    """Serve the Lovelace card JS — no auth required so the browser can load it."""
+    """Serve the Lovelace card JS — no auth so the browser can load it."""
 
-    url = FRONTEND_URL_LOCAL
+    url = FRONTEND_URL
     name = f"{DOMAIN}:card"
     requires_auth = False
 
@@ -63,64 +65,83 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data[DOMAIN][entry.entry_id] = coordinator
 
-    # Serve JS directly from the integration (works with or without HACS plugin)
     hass.http.register_view(MercedesTripsCardView)
     hass.http.register_view(TripsListView)
     hass.http.register_view(TripDetailView)
 
-    # Register the Lovelace resource once HA is fully started
+    # Schedule resource registration after HA is fully up
     @callback
     def _on_ha_started(_event=None) -> None:
-        hass.async_create_task(_async_register_lovelace_resource(hass))
+        hass.async_create_task(_async_ensure_lovelace_resource(hass))
 
     if hass.is_running:
-        hass.async_create_task(_async_register_lovelace_resource(hass))
+        hass.async_create_task(_async_ensure_lovelace_resource(hass))
     else:
         hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _on_ha_started)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 
-    _LOGGER.info("Mercedes Trips: loaded — card at %s", FRONTEND_URL_LOCAL)
+    _LOGGER.info("Mercedes Trips: loaded — card at %s", FRONTEND_URL)
     return True
 
 
-async def _async_register_lovelace_resource(hass: HomeAssistant) -> None:
-    """Register the card as a Lovelace resource.
+async def _async_ensure_lovelace_resource(hass: HomeAssistant) -> None:
+    """Guarantee the card is registered as a Lovelace resource.
 
-    Tries the HACS-served URL first, falls back to the locally served URL.
-    Uses HA's internal storage for reliable cross-version compatibility.
+    Tries the live collection first (immediate effect).
+    Falls back to writing the HA storage file directly (effective after next restart).
     """
-    # Prefer HACS URL if the plugin is installed, otherwise use local URL
-    hacs_path = hass.config.path("www", "community", "mercedes-logbook", FRONTEND_SCRIPT)
-    url = FRONTEND_URL_HACS if Path(hacs_path).exists() else FRONTEND_URL_LOCAL
-
+    # ── Method 1: live collection API ─────────────────────────────────────────
     try:
         from homeassistant.components.lovelace import resources as lovelace_res  # noqa: PLC0415
 
         collection = await lovelace_res.async_get_resource_collection(hass)
-        existing = {item["url"] for item in collection.async_items()}
+        existing_urls = {item["url"] for item in collection.async_items()}
 
-        # Remove stale entries for this integration (both possible URLs)
-        for item in list(collection.async_items()):
-            if item["url"] in (FRONTEND_URL_LOCAL, FRONTEND_URL_HACS) and item["url"] != url:
-                try:
-                    await collection.async_delete_item(item["id"])
-                except Exception:  # noqa: BLE001
-                    pass
-
-        if url not in existing:
-            await collection.async_create_item({"res_type": "module", "url": url})
-            _LOGGER.info("Mercedes Trips: Lovelace resource registered → %s", url)
+        if FRONTEND_URL not in existing_urls:
+            await collection.async_create_item({"res_type": "module", "url": FRONTEND_URL})
+            _LOGGER.info("Mercedes Trips: recurso Lovelace registrado (live) → %s", FRONTEND_URL)
         else:
-            _LOGGER.debug("Mercedes Trips: Lovelace resource already registered (%s)", url)
+            _LOGGER.debug("Mercedes Trips: recurso Lovelace ya registrado")
+        return
+    except Exception as exc:
+        _LOGGER.debug("Mercedes Trips: collection API falló (%s), usando storage directo", exc)
 
-    except Exception as exc:  # noqa: BLE001
-        _LOGGER.warning(
-            "Mercedes Trips: no se pudo auto-registrar el recurso Lovelace (%s). "
+    # ── Method 2: write directly to HA storage ────────────────────────────────
+    try:
+        store = Store(hass, _LOVELACE_STORAGE_VERSION, _LOVELACE_STORAGE_KEY)
+        data = await store.async_load()
+
+        if data is None:
+            data = {"items": []}
+
+        items: list[dict] = data.get("items", [])
+
+        if not any(item.get("url") == FRONTEND_URL for item in items):
+            items.append(
+                {
+                    "id": uuid.uuid4().hex[:8],
+                    "type": "module",
+                    "url": FRONTEND_URL,
+                }
+            )
+            data["items"] = items
+            await store.async_save(data)
+            _LOGGER.info(
+                "Mercedes Trips: recurso Lovelace escrito en storage → %s "
+                "(activo tras el próximo reinicio)",
+                FRONTEND_URL,
+            )
+        else:
+            _LOGGER.debug("Mercedes Trips: recurso ya existe en storage")
+
+    except Exception as exc:
+        _LOGGER.error(
+            "Mercedes Trips: no se pudo registrar el recurso Lovelace (%s). "
             "Añádelo manualmente: Ajustes → Dashboards → Recursos → %s (JavaScript Module)",
             exc,
-            url,
+            FRONTEND_URL,
         )
 
 
