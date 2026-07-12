@@ -340,11 +340,21 @@ class MercedesTripsCard extends HTMLElement {
       maxZoom: 19,
     }).addTo(this._map);
 
-    this._map.invalidateSize();
+    this._map.invalidateSize({ animate: false });
+
+    // Re-invalidate at several intervals to cover:
+    // - HA card editor dialog open animation
+    // - Lovelace panel transition
+    // - Any other deferred layout change
+    [100, 300, 600, 1200, 2500].forEach(ms =>
+      setTimeout(() => this._map && this._map.invalidateSize({ animate: false }), ms)
+    );
 
     if (window.ResizeObserver) {
-      new ResizeObserver(() => {
-        if (this._map) this._map.invalidateSize();
+      new ResizeObserver(entries => {
+        if (!this._map) return;
+        const { width, height } = entries[0].contentRect;
+        if (width > 0 && height > 0) this._map.invalidateSize({ animate: false });
       }).observe(el);
     }
 
@@ -537,14 +547,6 @@ class MercedesTripsCard extends HTMLElement {
   }
 
   getCardSize() { return 7; }
-
-  static getConfigElement() {
-    return document.createElement("mercedes-trips-card-editor");
-  }
-
-  static getStubConfig() {
-    return {};
-  }
 }
 
 customElements.define("mercedes-trips-card", MercedesTripsCard);
