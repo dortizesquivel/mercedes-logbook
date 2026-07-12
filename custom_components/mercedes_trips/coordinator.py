@@ -65,12 +65,21 @@ class TripCoordinator:
         self._listeners: list = []
         self._sensors: list = []
         self._lock = asyncio.Lock()
+        self._stats_cache: dict = {
+            "distance_this_month": 0,
+            "distance_this_year": 0,
+            "kwh_this_month": 0,
+            "avg_kwh_per_100km": 0,
+            "total_trips": 0,
+        }
+        self._last_trip_cache: dict | None = None
 
     # ── Setup / teardown ──────────────────────────────────────────────────────
 
     async def async_setup(self) -> None:
         await self.hass.async_add_executor_job(self._init_db)
         self._active_trip = await self._store.async_load() or None
+        await self._refresh_cache()
 
         if self._active_trip:
             _LOGGER.info("Mercedes Trips: recovered in-progress trip from storage")
@@ -107,12 +116,17 @@ class TripCoordinator:
         if self._active_trip:
             await self._store.async_save(self._active_trip)
 
+    # Stats cache — updated after each trip close, read synchronously by sensors
+    @property
+    def stats_cache(self) -> dict:
+        return self._stats_cache
+
     def register_sensor(self, sensor) -> None:
         self._sensors.append(sensor)
 
     def _notify_sensors(self) -> None:
         for sensor in self._sensors:
-            sensor.schedule_update_ha_state(True)
+            sensor.async_write_ha_state()
 
     # ── Database ──────────────────────────────────────────────────────────────
 
@@ -260,8 +274,13 @@ class TripCoordinator:
             conn.close()
 
     def get_last_trip(self) -> dict | None:
-        trips = self.get_trips(limit=1)
-        return trips[0] if trips else None
+        return self._last_trip_cache
+
+    async def _refresh_cache(self) -> None:
+        stats = await self.hass.async_add_executor_job(self.get_stats)
+        self._stats_cache = stats
+        trips = await self.hass.async_add_executor_job(self.get_trips, 1, 0)
+        self._last_trip_cache = trips[0] if trips else None
 
     # ── Geocoding ─────────────────────────────────────────────────────────────
 
@@ -550,6 +569,7 @@ class TripCoordinator:
             end_address or "?",
         )
 
+        await self._refresh_cache()
         self._notify_sensors()
 
     @property
