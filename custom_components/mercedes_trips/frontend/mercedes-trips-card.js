@@ -168,15 +168,15 @@ class MercedesTripsCard extends HTMLElement {
       <style>
         :host {
           display: block;
-          /* Brand tokens — constant across HA's light/dark themes on
-             purpose (this is the one place the card doesn't follow the
-             dashboard theme, same way a real trip computer's own accent
-             color doesn't change with the car's ambient lighting). */
-          --eq-teal: #00c2b2;
-          --eq-teal-strong: #00e0cc;
-          --eq-teal-deep: #0a3d39;
-          --good: #3fae6b;
-          --bad: #d64545;
+          /* Every color token below resolves to a Home Assistant theme
+             variable first — the card follows whatever theme (and
+             light/dark mode) the user has active. The hex after the comma
+             is only a fallback for the rare theme that doesn't define it,
+             never the real value. */
+          --accent: var(--primary-color, #03a9f4);
+          --accent-on: var(--text-primary-color, #fff);
+          --good: var(--success-color, #4caf50);
+          --bad: var(--error-color, #db4437);
           --font-display: 'Chakra Petch', var(--primary-font-family, sans-serif);
           --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
         }
@@ -195,7 +195,7 @@ class MercedesTripsCard extends HTMLElement {
         }
         .eyebrow {
           font-family: var(--font-mono); font-size: 0.66rem; font-weight: 500;
-          letter-spacing: .14em; text-transform: uppercase; color: var(--eq-teal);
+          letter-spacing: .14em; text-transform: uppercase; color: var(--accent);
           display: block; margin-bottom: 4px;
         }
         .card-title {
@@ -206,35 +206,37 @@ class MercedesTripsCard extends HTMLElement {
           display: inline-flex; align-items: center; gap: 6px;
           font-family: var(--font-mono); font-size: 0.64rem; font-weight: 700;
           letter-spacing: .07em; text-transform: uppercase;
-          color: var(--eq-teal-deep); background: var(--eq-teal);
+          color: var(--accent-on); background: var(--accent);
           padding: 5px 10px 5px 8px; border-radius: 100px; white-space: nowrap;
         }
-        .badge-live .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--eq-teal-deep); animation: mt-pulse 1.8s ease-in-out infinite; }
+        .badge-live .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-on); animation: mt-pulse 1.8s ease-in-out infinite; }
         @keyframes mt-pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
 
-        /* ── Instrument strip: always-dark trip-computer readout ───────
-           The signature element. It deliberately ignores the dashboard's
-           light/dark theme, same as a real trip computer's own LCD. */
+        /* ── Instrument strip: the trip-computer readout ────────────────
+           Tinted with the theme's own accent over the theme's own card
+           surface, so it reads as a distinct "readout" panel in any
+           theme (light or dark) instead of forcing one look. */
         .instrument {
-          margin: 0 20px 18px; background: var(--eq-teal-deep);
-          background-image: radial-gradient(120% 140% at 0% 0%, rgba(0,224,204,.16), transparent 55%);
+          margin: 0 20px 18px;
+          background: color-mix(in srgb, var(--accent) 10%, var(--card-background-color, #1c1c1e));
+          border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
           border-radius: 12px; padding: 14px 4px;
           display: grid; grid-template-columns: repeat(4, 1fr);
         }
-        .instrument .stat { padding: 0 16px; border-left: 1px solid rgba(255,255,255,.08); display: flex; flex-direction: column; gap: 4px; }
+        .instrument .stat { padding: 0 16px; border-left: 1px solid var(--divider-color, rgba(127,127,127,.2)); display: flex; flex-direction: column; gap: 4px; }
         .instrument .stat:first-child { border-left: none; }
         .stat-value {
           font-family: var(--font-mono); font-variant-numeric: tabular-nums;
           font-weight: 700; font-size: clamp(1.05rem, 2.4vw, 1.3rem);
-          color: #f2fffc; letter-spacing: -.01em; text-shadow: 0 0 16px rgba(0,224,204,.4);
+          color: var(--primary-text-color, #fff); letter-spacing: -.01em;
         }
-        .stat-value .unit { font-size: 0.62em; font-weight: 500; color: var(--eq-teal-strong); margin-left: 3px; }
-        .stat-label { font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: .08em; text-transform: uppercase; color: rgba(230,255,250,.55); }
+        .stat-value .unit { font-size: 0.62em; font-weight: 500; color: var(--accent); margin-left: 3px; }
+        .stat-label { font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: .08em; text-transform: uppercase; color: var(--secondary-text-color, #aaa); }
         .stat-delta { display: inline-flex; align-items: center; gap: 3px; font-family: var(--font-mono); font-size: 0.62rem; font-weight: 700; margin-top: 1px; min-height: 1em; }
-        .stat-delta.neutral { color: rgba(230,255,250,.6); }
+        .stat-delta.neutral { color: var(--secondary-text-color, #aaa); }
         .stat-delta.good { color: var(--good); }
         .stat-delta.bad { color: var(--bad); }
-        .stat-delta .vs { color: rgba(230,255,250,.4); font-weight: 500; text-transform: none; letter-spacing: 0; }
+        .stat-delta .vs { color: var(--secondary-text-color, #aaa); opacity: .8; font-weight: 500; text-transform: none; letter-spacing: 0; }
         .instrument.is-loading .stat-value, .instrument.is-loading .stat-label, .instrument.is-loading .stat-delta { visibility: hidden; }
 
         /* ── Quick filters ───────────────────────────────────────────── */
@@ -247,12 +249,12 @@ class MercedesTripsCard extends HTMLElement {
           padding: 7px 13px; cursor: pointer;
         }
         .chip:hover { color: var(--primary-text-color, #fff); }
-        .chip.is-active { background: var(--eq-teal); color: var(--eq-teal-deep); }
+        .chip.is-active { background: var(--accent); color: var(--accent-on); }
         .chip-custom { display: inline-flex; align-items: center; gap: 5px; }
         .chip-custom .caret { font-size: 0.65em; transition: transform .15s; }
         .chip-custom[aria-expanded="true"] .caret { transform: rotate(180deg); }
         .chip:focus-visible, .btn:focus-visible, input:focus-visible, select:focus-visible {
-          outline: 2px solid var(--eq-teal); outline-offset: 2px;
+          outline: 2px solid var(--accent); outline-offset: 2px;
         }
 
         .custom-range { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--divider-color, rgba(255,255,255,0.12)); }
@@ -261,15 +263,15 @@ class MercedesTripsCard extends HTMLElement {
         .field input, .field select { border: none; background: transparent; color: inherit; font-family: var(--primary-font-family, sans-serif); font-size: 0.8rem; outline: none; }
         .field select { font-family: var(--font-mono); cursor: pointer; }
         .field .sep { color: var(--secondary-text-color, #aaa); font-size: 0.76rem; }
-        .field:focus-within { border-color: var(--eq-teal); }
+        .field:focus-within { border-color: var(--accent); }
 
         .btn {
           font-family: var(--font-mono); font-size: 0.7rem; font-weight: 700;
           letter-spacing: .05em; text-transform: uppercase; border: none;
           border-radius: 100px; padding: 8px 15px; cursor: pointer;
         }
-        .btn-primary { background: var(--eq-teal); color: var(--eq-teal-deep); }
-        .btn-primary:hover { background: var(--eq-teal-strong); }
+        .btn-primary { background: var(--accent); color: var(--accent-on); }
+        .btn-primary:hover { filter: brightness(1.1); }
 
         .filter-summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; font-size: 0.78rem; color: var(--secondary-text-color, #aaa); }
         .filter-summary b { color: var(--primary-text-color, #fff); font-weight: 600; }
@@ -389,9 +391,9 @@ class MercedesTripsCard extends HTMLElement {
         /* route glyph: start · spine · end — echoes the polyline on the map */
         .glyph { width: 12px; height: 32px; position: relative; margin: 0 auto; }
         .glyph i { position: absolute; left: 50%; transform: translateX(-50%); width: 7px; height: 7px; border-radius: 50%; }
-        .glyph .start { top: 0; background: var(--route-color, var(--eq-teal)); }
+        .glyph .start { top: 0; background: var(--route-color, var(--accent)); }
         .glyph .end { bottom: 0; background: var(--secondary-text-color, #aaa); opacity: .5; }
-        .glyph .spine { position: absolute; left: 50%; top: 6px; bottom: 6px; width: 2px; transform: translateX(-50%); background: var(--route-color, var(--eq-teal)); opacity: .35; }
+        .glyph .spine { position: absolute; left: 50%; top: 6px; bottom: 6px; width: 2px; transform: translateX(-50%); background: var(--route-color, var(--accent)); opacity: .35; }
 
         .trip-route { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
         .trip-route .main { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
