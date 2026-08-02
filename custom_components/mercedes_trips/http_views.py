@@ -65,7 +65,11 @@ class TripsListView(HomeAssistantView):
 
         return web.Response(
             content_type="application/json",
-            text=json.dumps({"trips": trips, "stats": stats, "active_trip": active}),
+            # default=str: safety net so an unexpected non-JSON-safe value
+            # (e.g. a datetime slipping in from an upstream integration's
+            # entity attributes) degrades to its string form instead of a
+            # 500 for the whole endpoint.
+            text=json.dumps({"trips": trips, "stats": stats, "active_trip": active}, default=str),
         )
 
 
@@ -134,5 +138,5 @@ class TripDetailView(HomeAssistantView):
 
         return web.Response(
             content_type="application/json",
-            text=json.dumps(trip),
+            text=json.dumps(trip, default=str),
         )

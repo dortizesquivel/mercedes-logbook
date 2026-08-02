@@ -415,7 +415,18 @@ class TripCoordinator:
         if lat is None or lon is None:
             return None
         heading = _safe_float(attrs.get("positionHeading"))
-        gps_ts: str | None = attrs.get("timestamp")  # ISO from Mercedes API
+        gps_ts_raw = attrs.get("timestamp")  # ISO from Mercedes API
+        # mbapi2020 exposes this as a native datetime, not a string — stored
+        # as-is, it JSON-serializes fine going through the DB round trip
+        # (json.dumps there would already fail loudly), but crashes the API
+        # response for whichever trip is still in-progress in memory,
+        # because that one skips the DB and gets json.dumps()'d directly.
+        if isinstance(gps_ts_raw, datetime):
+            gps_ts = gps_ts_raw.isoformat()
+        elif gps_ts_raw is not None:
+            gps_ts = str(gps_ts_raw)
+        else:
+            gps_ts = None
         return lat, lon, heading, gps_ts
 
     # ── Trip detection ────────────────────────────────────────────────────────
