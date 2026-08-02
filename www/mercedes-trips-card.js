@@ -11,6 +11,10 @@ const TRIP_COLORS = [
   "#6a4c93", "#1982c4", "#ff595e", "#06d6a0", "#fb8500",
 ];
 
+// Cap rendered waypoints per trip so long trips (hours of GPS points every
+// 30s) don't stall the main thread when drawing/fitting the map.
+const MAX_TRIP_POINTS = 300;
+
 function _loadScript(src) {
   return new Promise((resolve, reject) => {
     if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
@@ -70,6 +74,13 @@ class MercedesTripsCard extends HTMLElement {
     this._buildDOM();
     // Then load Leaflet JS globally
     await _loadScript(LEAFLET_JS);
+    // Other HA cards (e.g. vehicle-info-card) bundle their own Leaflet copy
+    // and reassign window.L for their own use once they load. Snapshot our
+    // own reference right now so later reassignment elsewhere on the
+    // dashboard can't make us mix objects from two different Leaflet
+    // instances (that mismatch corrupts internal map state and throws
+    // "Cannot read properties of undefined (reading 'x')" inside Leaflet).
+    this._L = window.L;
     // Init map and fetch data
     this._scheduleMapInit();
     await this._fetchAndDraw();
@@ -318,7 +329,7 @@ class MercedesTripsCard extends HTMLElement {
 
   _initMap() {
     if (this._map) return;
-    if (!window.L) return;
+    if (!this._L) return;
 
     const el = this.shadowRoot && this.shadowRoot.getElementById("map");
     if (!el) return;
@@ -330,12 +341,12 @@ class MercedesTripsCard extends HTMLElement {
       return;
     }
 
-    this._map = window.L.map(el, {
+    this._map = this._L.map(el, {
       zoomControl: true,
       preferCanvas: true,
     }).setView([40.4, -3.7], 6);
 
-    window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    this._L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: "© <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a>",
       maxZoom: 19,
     }).addTo(this._map);
@@ -360,29 +371,39 @@ class MercedesTripsCard extends HTMLElement {
       setTimeout(() => this._map && this._map.invalidateSize({ animate: false }), ms)
     );
 
+    // Disconnect any observers left over from a previous _initMap() call
+    // (e.g. after the dblclick reset below) so they don't pile up.
+    if (this._resizeObserver) this._resizeObserver.disconnect();
+    if (this._intersectionObserver) this._intersectionObserver.disconnect();
+
     if (window.ResizeObserver) {
-      new ResizeObserver(entries => {
+      this._resizeObserver = new ResizeObserver(entries => {
         if (!this._map) return;
         const { width, height } = entries[0].contentRect;
         if (width > 0 && height > 0) this._map.invalidateSize({ animate: false });
-      }).observe(el);
+      });
+      this._resizeObserver.observe(el);
     }
 
     // IntersectionObserver: re-validate when card enters viewport after
     // being off-screen (e.g. HA tab switch, panel slide-in animation).
     if (window.IntersectionObserver) {
-      new IntersectionObserver((entries) => {
+      this._intersectionObserver = new IntersectionObserver((entries) => {
         entries.forEach(entry => {
           if (entry.isIntersecting && this._map) {
             this._map.invalidateSize({ animate: false });
           }
         });
-      }, { threshold: 0.1 }).observe(this);
+      }, { threshold: 0.1 });
+      this._intersectionObserver.observe(this);
     }
 
-    // Double-click on map container forces full re-init (emergency escape hatch)
+    // Double-click on map container forces full re-init (emergency escape
+    // hatch). Registered once per DOM build, not per _initMap() call, so it
+    // doesn't stack up across re-inits.
     const container = this.shadowRoot.getElementById("map-container");
-    if (container) {
+    if (container && !this._dblclickBound) {
+      this._dblclickBound = true;
       container.addEventListener("dblclick", () => {
         if (this._map) {
           this._map.remove();
@@ -414,6 +435,14 @@ class MercedesTripsCard extends HTMLElement {
   }
 
   async _fetchAndDraw() {
+    // Guard against overlapping requests (e.g. user double-clicking
+    // "Filtrar" while a previous fetch/render is still in flight).
+    if (this._fetchInFlight) return;
+    this._fetchInFlight = true;
+
+    const list = this.shadowRoot.getElementById("trip-list");
+    if (list) list.innerHTML = `<div class="loading">Cargando trayectos…</div>`;
+
     const { startDate, endDate, hourStart, hourEnd } = this._filters;
     const params = new URLSearchParams({ limit: 200 });
     if (startDate) params.set("start_date", startDate);
@@ -433,10 +462,18 @@ class MercedesTripsCard extends HTMLElement {
       console.error("Mercedes Trips card: fetch error", e);
       this._trips = [];
       this._stats = {};
+    } finally {
+      this._fetchInFlight = false;
     }
 
     this._updateStats();
-    this._drawMap();
+    // Leaflet errors (e.g. from a global L conflict with another map card
+    // on the same dashboard) must not prevent the trip list from rendering.
+    try {
+      this._drawMap();
+    } catch (e) {
+      console.error("Mercedes Trips card: map render error", e);
+    }
     this._renderList();
     this._renderDetailPanel(this._selectedTrip);
   }
@@ -454,12 +491,19 @@ class MercedesTripsCard extends HTMLElement {
   }
 
   _drawMap() {
-    if (!this._map || !window.L) return;
+    if (!this._map || !this._L) return;
 
     this._mapLayers.forEach(l => l.remove());
     this._mapLayers = [];
 
-    const allBounds = [];
+    let bounds = null;
+    const extendBounds = (pts) => {
+      pts.forEach(p => {
+        if (bounds) bounds.extend(p);
+        else bounds = this._L.latLngBounds(p, p);
+      });
+    };
+
     this._trips.forEach((trip, i) => {
       const color = TRIP_COLORS[i % TRIP_COLORS.length];
       const waypoints = (trip.waypoints || [])
@@ -472,15 +516,26 @@ class MercedesTripsCard extends HTMLElement {
         if (trip.end_lat && trip.end_lon)     points.push([trip.end_lat, trip.end_lon]);
       }
 
+      // Downsample very dense tracks so the browser doesn't choke on
+      // long trips (hours of GPS points every 30s) when rendering/fitting.
+      if (points.length > MAX_TRIP_POINTS) {
+        const stride = Math.ceil(points.length / MAX_TRIP_POINTS);
+        const sampled = points.filter((_, idx) => idx % stride === 0);
+        if (sampled[sampled.length - 1] !== points[points.length - 1]) {
+          sampled.push(points[points.length - 1]);
+        }
+        points = sampled;
+      }
+
       if (points.length >= 2) {
-        const line = window.L.polyline(points, { color, weight: 3, opacity: 0.85 }).addTo(this._map);
+        const line = this._L.polyline(points, { color, weight: 3, opacity: 0.85 }).addTo(this._map);
         line.on("click", () => this._selectTrip(trip));
         this._mapLayers.push(line);
-        allBounds.push(...points);
+        extendBounds(points);
       }
 
       if (trip.start_lat && trip.start_lon) {
-        const m = window.L.circleMarker([trip.start_lat, trip.start_lon], {
+        const m = this._L.circleMarker([trip.start_lat, trip.start_lon], {
           radius: 5, color: "#fff", fillColor: color, fillOpacity: 1, weight: 2,
         }).addTo(this._map);
         m.bindTooltip(
@@ -491,7 +546,7 @@ class MercedesTripsCard extends HTMLElement {
         this._mapLayers.push(m);
       }
       if (trip.end_lat && trip.end_lon) {
-        const m = window.L.circleMarker([trip.end_lat, trip.end_lon], {
+        const m = this._L.circleMarker([trip.end_lat, trip.end_lon], {
           radius: 5, color: "#fff", fillColor: "#555", fillOpacity: 1, weight: 2,
         }).addTo(this._map);
         m.on("click", () => this._selectTrip(trip));
@@ -499,8 +554,8 @@ class MercedesTripsCard extends HTMLElement {
       }
     });
 
-    if (allBounds.length > 0) {
-      try { this._map.fitBounds(window.L.latLngBounds(allBounds), { padding: [20, 20] }); } catch(_) {}
+    if (bounds) {
+      try { this._map.fitBounds(bounds, { padding: [20, 20] }); } catch(_) {}
     }
 
     setTimeout(() => this._map && this._map.invalidateSize(), 150);
@@ -541,7 +596,7 @@ class MercedesTripsCard extends HTMLElement {
     this._renderList();
     this._renderDetailPanel(trip);
 
-    if (!this._map || !window.L) return;
+    if (!this._map || !this._L) return;
     const pts = (trip.waypoints || []).filter(w => w && w.length >= 2).map(w => [w[0], w[1]]);
     const fallback = [
       trip.start_lat && trip.start_lon ? [trip.start_lat, trip.start_lon] : null,
@@ -549,7 +604,7 @@ class MercedesTripsCard extends HTMLElement {
     ].filter(Boolean);
     const bounds = pts.length >= 2 ? pts : fallback;
     if (bounds.length > 0) {
-      try { this._map.fitBounds(window.L.latLngBounds(bounds), { padding: [30, 30], maxZoom: 14 }); } catch(_) {}
+      try { this._map.fitBounds(this._L.latLngBounds(bounds), { padding: [30, 30], maxZoom: 14 }); } catch(_) {}
     }
   }
 
