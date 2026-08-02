@@ -89,16 +89,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.http.register_view(TripDetailView)
     hass.http.register_view(TripTotalsView)
 
-    # Inject JS into frontend — tried in order, first success wins
-    _inject_frontend_js(hass)
+    # Inject JS into frontend — tried in order, first success wins. The
+    # Lovelace resource is only a FALLBACK for when none of those work, not
+    # a second, simultaneous injection: registering both makes the browser
+    # load the same <script type=module> twice for every page view, and on
+    # this integration's users we've seen that race get mishandled by HA's
+    # own service worker, intermittently failing to mount the card
+    # ("Error de configuración") depending on cache state. Whichever path
+    # we're NOT using also gets actively cleaned up, so upgrading from an
+    # older version that always registered the resource doesn't leave a
+    # stale duplicate behind.
+    injected = _inject_frontend_js(hass)
 
-    # Also persist in Lovelace storage as fallback
     @callback
     def _on_ha_started(_event=None) -> None:
-        hass.async_create_task(_async_ensure_lovelace_resource(hass))
+        hass.async_create_task(_async_ensure_lovelace_resource(hass, add_new=not injected))
 
     if hass.is_running:
-        hass.async_create_task(_async_ensure_lovelace_resource(hass))
+        hass.async_create_task(_async_ensure_lovelace_resource(hass, add_new=not injected))
     else:
         hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _on_ha_started)
 
@@ -109,14 +117,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
-def _inject_frontend_js(hass: HomeAssistant) -> None:
-    """Inject the card JS into HA frontend using multiple methods."""
+def _inject_frontend_js(hass: HomeAssistant) -> bool:
+    """Inject the card JS into HA frontend using multiple methods.
+
+    Returns True as soon as one method succeeds, so the caller knows the
+    Lovelace-resource fallback isn't needed (and should be actively
+    cleaned up if a previous version left one registered).
+    """
     # Method A: add_extra_js_url (HA 2023+, used by browser_mod and similar)
     try:
         from homeassistant.components.frontend import add_extra_js_url  # noqa: PLC0415
         add_extra_js_url(hass, FRONTEND_VERSIONED_URL, False)
         _LOGGER.info("Mercedes Trips: JS inyectado via add_extra_js_url → %s", FRONTEND_VERSIONED_URL)
-        return
+        return True
     except (ImportError, Exception) as exc:
         _LOGGER.debug("Mercedes Trips: add_extra_js_url no disponible (%s)", exc)
 
@@ -125,7 +138,7 @@ def _inject_frontend_js(hass: HomeAssistant) -> None:
         from homeassistant.components.frontend import async_register_extra_js_url  # noqa: PLC0415
         async_register_extra_js_url(hass, FRONTEND_VERSIONED_URL)
         _LOGGER.info("Mercedes Trips: JS inyectado via async_register_extra_js_url → %s", FRONTEND_VERSIONED_URL)
-        return
+        return True
     except (ImportError, Exception) as exc:
         _LOGGER.debug("Mercedes Trips: async_register_extra_js_url no disponible (%s)", exc)
 
@@ -139,7 +152,7 @@ def _inject_frontend_js(hass: HomeAssistant) -> None:
         if FRONTEND_VERSIONED_URL not in extra:
             extra.append(FRONTEND_VERSIONED_URL)
         _LOGGER.info("Mercedes Trips: JS inyectado via KEY_EXTRA_JS_URL_ES5 → %s", FRONTEND_VERSIONED_URL)
-        return
+        return True
     except (ImportError, Exception) as exc:
         _LOGGER.debug("Mercedes Trips: KEY_EXTRA_JS_URL_ES5 no disponible (%s)", exc)
 
@@ -148,18 +161,32 @@ def _inject_frontend_js(hass: HomeAssistant) -> None:
         "Añade manualmente el recurso Lovelace: %s (JavaScript Module)",
         FRONTEND_VERSIONED_URL,
     )
+    return False
 
 
-async def _async_ensure_lovelace_resource(hass: HomeAssistant) -> None:
-    """Guarantee the card is registered as a Lovelace resource.
+async def _async_ensure_lovelace_resource(hass: HomeAssistant, add_new: bool = True) -> None:
+    """Reconcile the card's Lovelace resource entry.
 
-    Tries the live collection first (immediate effect).
-    Falls back to writing the HA storage file directly (effective after next restart).
+    add_new=True (fallback mode, add_extra_js_url unavailable): guarantee
+    a resource exists for the current versioned URL, tried via the live
+    collection first, falling back to writing HA storage directly.
+
+    add_new=False (add_extra_js_url already injected the script):
+    actively remove ANY resource entry for this card, including one at the
+    current URL — registering both would make the browser load the same
+    <script type=module> twice per page view, a race HA's own service
+    worker has been seen to mishandle (intermittent "Error de
+    configuración" depending on cache state).
     """
+    def _is_our_url(url: str) -> bool:
+        return url == FRONTEND_URL or url.startswith(FRONTEND_URL + "?")
+
     def _is_stale(url: str) -> bool:
+        if not add_new:
+            return _is_our_url(url)
         # Matches our own bare URL or any previous ?v=<hash> of it, but not
-        # the current versioned URL.
-        return (url == FRONTEND_URL or url.startswith(FRONTEND_URL + "?")) and url != FRONTEND_VERSIONED_URL
+        # the current versioned URL (which should be kept, not removed).
+        return _is_our_url(url) and url != FRONTEND_VERSIONED_URL
 
     # ── Method 1: live collection API ─────────────────────────────────────────
     try:
@@ -172,6 +199,9 @@ async def _async_ensure_lovelace_resource(hass: HomeAssistant) -> None:
             if _is_stale(item["url"]):
                 await collection.async_delete_item(item["id"])
                 _LOGGER.info("Mercedes Trips: recurso Lovelace obsoleto eliminado (live) → %s", item["url"])
+
+        if not add_new:
+            return
 
         existing_urls = {item["url"] for item in collection.async_items()}
         if FRONTEND_VERSIONED_URL not in existing_urls:
@@ -194,6 +224,13 @@ async def _async_ensure_lovelace_resource(hass: HomeAssistant) -> None:
         items: list[dict] = data.get("items", [])
         kept = [item for item in items if not _is_stale(item.get("url", ""))]
         removed = len(items) - len(kept)
+
+        if not add_new:
+            if removed:
+                data["items"] = kept
+                await store.async_save(data)
+                _LOGGER.info("Mercedes Trips: %d recurso(s) obsoleto(s) eliminado(s) de storage", removed)
+            return
 
         if not any(item.get("url") == FRONTEND_VERSIONED_URL for item in kept):
             kept.append(

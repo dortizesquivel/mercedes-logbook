@@ -17,15 +17,18 @@ const ROUTE_COLORS = ["#00c2b2", "#ffb020", "#9a8cf0", "#ff6b5e"];
 // 30s) don't stall the main thread when drawing/fitting the map.
 const MAX_TRIP_POINTS = 300;
 
+// deltaLabel stays short on purpose — it sits inside a narrow instrument
+// cell next to the delta value, and the period it's "vs." is already
+// named by the stat-label right above it.
 const QUICK_FILTERS = [
   { key: "today",     label: "Hoy",          deltaLabel: "vs. ayer" },
-  { key: "yesterday", label: "Ayer",         deltaLabel: "vs. anteayer" },
-  { key: "7d",        label: "7 días",       deltaLabel: "vs. 7 días previos" },
-  { key: "month",     label: "Este mes",     deltaLabel: "vs. periodo anterior" },
-  { key: "lastMonth", label: "Mes anterior", deltaLabel: "vs. periodo anterior" },
-  { key: "year",      label: "Este año",     deltaLabel: "vs. año anterior" },
+  { key: "yesterday", label: "Ayer",         deltaLabel: "vs. anterior" },
+  { key: "7d",        label: "7 días",       deltaLabel: "vs. anterior" },
+  { key: "month",     label: "Este mes",     deltaLabel: "vs. anterior" },
+  { key: "lastMonth", label: "Mes anterior", deltaLabel: "vs. anterior" },
+  { key: "year",      label: "Este año",     deltaLabel: "vs. anterior" },
 ];
-const DEFAULT_QUICK_FILTER = "month";
+const DEFAULT_QUICK_FILTER = "7d";
 
 function _loadScript(src) {
   return new Promise((resolve, reject) => {
@@ -186,6 +189,13 @@ class MercedesTripsCard extends HTMLElement {
           overflow: hidden;
           font-family: var(--primary-font-family, sans-serif);
           color: var(--primary-text-color, #fff);
+          /* Dashboards put this card in narrow "sections" columns while the
+             browser viewport stays desktop-wide — a @media breakpoint never
+             fires in that case. Respond to the card's own rendered width
+             instead so the instrument strip actually collapses when it's
+             squeezed, rather than overflowing its rounded corners. */
+          container-type: inline-size;
+          container-name: mt-card;
         }
 
         /* ── Header ──────────────────────────────────────────────────── */
@@ -223,16 +233,27 @@ class MercedesTripsCard extends HTMLElement {
           border-radius: 12px; padding: 14px 4px;
           display: grid; grid-template-columns: repeat(4, 1fr);
         }
-        .instrument .stat { padding: 0 16px; border-left: 1px solid var(--divider-color, rgba(127,127,127,.2)); display: flex; flex-direction: column; gap: 4px; }
+        .instrument .stat {
+          padding: 0 12px; border-left: 1px solid var(--divider-color, rgba(127,127,127,.2));
+          display: flex; flex-direction: column; gap: 4px;
+          /* Grid items default to min-width:auto, which refuses to shrink
+             below the content's natural (unwrapped) width — that's what
+             was pushing the delta text past the panel's rounded corners
+             when the card renders narrower than the text needs. */
+          min-width: 0;
+        }
+        .instrument .stat:first-child { padding-left: 4px; }
+        .instrument .stat:last-child { padding-right: 4px; }
         .instrument .stat:first-child { border-left: none; }
         .stat-value {
           font-family: var(--font-mono); font-variant-numeric: tabular-nums;
-          font-weight: 700; font-size: clamp(1.05rem, 2.4vw, 1.3rem);
+          font-weight: 700; font-size: clamp(0.95rem, 2.4vw, 1.3rem);
           color: var(--primary-text-color, #fff); letter-spacing: -.01em;
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
         .stat-value .unit { font-size: 0.62em; font-weight: 500; color: var(--accent); margin-left: 3px; }
-        .stat-label { font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: .08em; text-transform: uppercase; color: var(--secondary-text-color, #aaa); }
-        .stat-delta { display: inline-flex; align-items: center; gap: 3px; font-family: var(--font-mono); font-size: 0.62rem; font-weight: 700; margin-top: 1px; min-height: 1em; }
+        .stat-label { font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: .08em; text-transform: uppercase; color: var(--secondary-text-color, #aaa); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .stat-delta { display: flex; flex-wrap: wrap; align-items: center; gap: 0 3px; font-family: var(--font-mono); font-size: 0.62rem; font-weight: 700; margin-top: 1px; min-height: 1em; line-height: 1.3; }
         .stat-delta.neutral { color: var(--secondary-text-color, #aaa); }
         .stat-delta.good { color: var(--good); }
         .stat-delta.bad { color: var(--bad); }
@@ -429,12 +450,23 @@ class MercedesTripsCard extends HTMLElement {
 
         .active-badge { display: none; }
 
-        @media (max-width: 480px) {
+        /* Container queries react to this card's own rendered width, not
+           the browser viewport — the correct signal in a dashboard where
+           the same card can sit in a wide single-column view or a narrow
+           "sections" grid column regardless of window size. */
+        @container mt-card (max-width: 480px) {
           .instrument { grid-template-columns: repeat(2, 1fr); row-gap: 12px; }
           .instrument .stat:nth-child(3) { border-left: none; }
           .list-head, .trip-row, .list-total { grid-template-columns: 24px 1fr 50px 50px; }
           .list-head .date, .trip-row .date { display: none; }
           .detail-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        /* Even a 2-column instrument can get tight in a very narrow
+           column — drop to a single column rather than let it overflow. */
+        @container mt-card (max-width: 300px) {
+          .instrument { grid-template-columns: 1fr; }
+          .instrument .stat { border-left: none; padding: 8px 4px 0; border-top: 1px solid var(--divider-color, rgba(127,127,127,.2)); }
+          .instrument .stat:first-child { border-top: none; padding-top: 0; }
         }
 
         @media (prefers-reduced-motion: reduce) {
