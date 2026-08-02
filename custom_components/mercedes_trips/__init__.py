@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import logging
 import uuid
 from pathlib import Path
@@ -23,6 +24,24 @@ PLATFORMS = ["sensor"]
 FRONTEND_SCRIPT = "mercedes-trips-card.js"
 FRONTEND_URL = f"/{DOMAIN}/{FRONTEND_SCRIPT}"
 FRONTEND_PATH = Path(__file__).parent / "frontend" / FRONTEND_SCRIPT
+
+
+def _frontend_content_hash() -> str:
+    """Short hash of the card JS content, used to cache-bust the browser/SW.
+
+    HACS does the same thing with its `?hacstag=<id>` query param on every
+    resource URL: a fixed URL lets browsers (and HA's service worker) keep
+    serving a stale cached copy forever after an update. Deriving the tag
+    from file content means it changes automatically whenever the JS
+    changes, with no need to remember to bump a version number by hand.
+    """
+    try:
+        return hashlib.sha1(FRONTEND_PATH.read_bytes()).hexdigest()[:10]
+    except OSError:
+        return "0"
+
+
+FRONTEND_VERSIONED_URL = f"{FRONTEND_URL}?v={_frontend_content_hash()}"
 
 # Same key/version HA uses internally for lovelace resources
 _LOVELACE_STORAGE_KEY = "lovelace_resources"
@@ -85,7 +104,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 
-    _LOGGER.info("Mercedes Trips: loaded — card at %s", FRONTEND_URL)
+    _LOGGER.info("Mercedes Trips: loaded — card at %s", FRONTEND_VERSIONED_URL)
     return True
 
 
@@ -94,8 +113,8 @@ def _inject_frontend_js(hass: HomeAssistant) -> None:
     # Method A: add_extra_js_url (HA 2023+, used by browser_mod and similar)
     try:
         from homeassistant.components.frontend import add_extra_js_url  # noqa: PLC0415
-        add_extra_js_url(hass, FRONTEND_URL, False)
-        _LOGGER.info("Mercedes Trips: JS inyectado via add_extra_js_url → %s", FRONTEND_URL)
+        add_extra_js_url(hass, FRONTEND_VERSIONED_URL, False)
+        _LOGGER.info("Mercedes Trips: JS inyectado via add_extra_js_url → %s", FRONTEND_VERSIONED_URL)
         return
     except (ImportError, Exception) as exc:
         _LOGGER.debug("Mercedes Trips: add_extra_js_url no disponible (%s)", exc)
@@ -103,8 +122,8 @@ def _inject_frontend_js(hass: HomeAssistant) -> None:
     # Method B: async_register_extra_js_url (some HA versions)
     try:
         from homeassistant.components.frontend import async_register_extra_js_url  # noqa: PLC0415
-        async_register_extra_js_url(hass, FRONTEND_URL)
-        _LOGGER.info("Mercedes Trips: JS inyectado via async_register_extra_js_url → %s", FRONTEND_URL)
+        async_register_extra_js_url(hass, FRONTEND_VERSIONED_URL)
+        _LOGGER.info("Mercedes Trips: JS inyectado via async_register_extra_js_url → %s", FRONTEND_VERSIONED_URL)
         return
     except (ImportError, Exception) as exc:
         _LOGGER.debug("Mercedes Trips: async_register_extra_js_url no disponible (%s)", exc)
@@ -113,9 +132,12 @@ def _inject_frontend_js(hass: HomeAssistant) -> None:
     try:
         from homeassistant.components.frontend import KEY_EXTRA_JS_URL_ES5  # noqa: PLC0415
         extra = hass.data.setdefault(KEY_EXTRA_JS_URL_ES5, [])
-        if FRONTEND_URL not in extra:
-            extra.append(FRONTEND_URL)
-        _LOGGER.info("Mercedes Trips: JS inyectado via KEY_EXTRA_JS_URL_ES5 → %s", FRONTEND_URL)
+        # Drop any previous-version entry for this card (bare URL or an
+        # older ?v=... hash) before appending the current one.
+        extra[:] = [u for u in extra if u != FRONTEND_URL and not u.startswith(FRONTEND_URL + "?")]
+        if FRONTEND_VERSIONED_URL not in extra:
+            extra.append(FRONTEND_VERSIONED_URL)
+        _LOGGER.info("Mercedes Trips: JS inyectado via KEY_EXTRA_JS_URL_ES5 → %s", FRONTEND_VERSIONED_URL)
         return
     except (ImportError, Exception) as exc:
         _LOGGER.debug("Mercedes Trips: KEY_EXTRA_JS_URL_ES5 no disponible (%s)", exc)
@@ -123,7 +145,7 @@ def _inject_frontend_js(hass: HomeAssistant) -> None:
     _LOGGER.warning(
         "Mercedes Trips: no se pudo inyectar el JS automáticamente. "
         "Añade manualmente el recurso Lovelace: %s (JavaScript Module)",
-        FRONTEND_URL,
+        FRONTEND_VERSIONED_URL,
     )
 
 
@@ -133,16 +155,27 @@ async def _async_ensure_lovelace_resource(hass: HomeAssistant) -> None:
     Tries the live collection first (immediate effect).
     Falls back to writing the HA storage file directly (effective after next restart).
     """
+    def _is_stale(url: str) -> bool:
+        # Matches our own bare URL or any previous ?v=<hash> of it, but not
+        # the current versioned URL.
+        return (url == FRONTEND_URL or url.startswith(FRONTEND_URL + "?")) and url != FRONTEND_VERSIONED_URL
+
     # ── Method 1: live collection API ─────────────────────────────────────────
     try:
         from homeassistant.components.lovelace import resources as lovelace_res  # noqa: PLC0415
 
         collection = await lovelace_res.async_get_resource_collection(hass)
-        existing_urls = {item["url"] for item in collection.async_items()}
+        items = list(collection.async_items())
 
-        if FRONTEND_URL not in existing_urls:
-            await collection.async_create_item({"res_type": "module", "url": FRONTEND_URL})
-            _LOGGER.info("Mercedes Trips: recurso Lovelace registrado (live) → %s", FRONTEND_URL)
+        for item in items:
+            if _is_stale(item["url"]):
+                await collection.async_delete_item(item["id"])
+                _LOGGER.info("Mercedes Trips: recurso Lovelace obsoleto eliminado (live) → %s", item["url"])
+
+        existing_urls = {item["url"] for item in collection.async_items()}
+        if FRONTEND_VERSIONED_URL not in existing_urls:
+            await collection.async_create_item({"res_type": "module", "url": FRONTEND_VERSIONED_URL})
+            _LOGGER.info("Mercedes Trips: recurso Lovelace registrado (live) → %s", FRONTEND_VERSIONED_URL)
         else:
             _LOGGER.debug("Mercedes Trips: recurso Lovelace ya registrado")
         return
@@ -158,22 +191,29 @@ async def _async_ensure_lovelace_resource(hass: HomeAssistant) -> None:
             data = {"items": []}
 
         items: list[dict] = data.get("items", [])
+        kept = [item for item in items if not _is_stale(item.get("url", ""))]
+        removed = len(items) - len(kept)
 
-        if not any(item.get("url") == FRONTEND_URL for item in items):
-            items.append(
+        if not any(item.get("url") == FRONTEND_VERSIONED_URL for item in kept):
+            kept.append(
                 {
                     "id": uuid.uuid4().hex[:8],
                     "type": "module",
-                    "url": FRONTEND_URL,
+                    "url": FRONTEND_VERSIONED_URL,
                 }
             )
-            data["items"] = items
+            data["items"] = kept
             await store.async_save(data)
             _LOGGER.info(
                 "Mercedes Trips: recurso Lovelace escrito en storage → %s "
-                "(activo tras el próximo reinicio)",
-                FRONTEND_URL,
+                "(%d obsoleto(s) eliminado(s), activo tras el próximo reinicio)",
+                FRONTEND_VERSIONED_URL,
+                removed,
             )
+        elif removed:
+            data["items"] = kept
+            await store.async_save(data)
+            _LOGGER.info("Mercedes Trips: %d recurso(s) obsoleto(s) eliminado(s) de storage", removed)
         else:
             _LOGGER.debug("Mercedes Trips: recurso ya existe en storage")
 
@@ -182,7 +222,7 @@ async def _async_ensure_lovelace_resource(hass: HomeAssistant) -> None:
             "Mercedes Trips: no se pudo registrar el recurso Lovelace (%s). "
             "Añádelo manualmente: Ajustes → Dashboards → Recursos → %s (JavaScript Module)",
             exc,
-            FRONTEND_URL,
+            FRONTEND_VERSIONED_URL,
         )
 
 
