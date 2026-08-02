@@ -1013,12 +1013,24 @@ class MercedesTripsCard extends HTMLElement {
   getCardSize() { return 8; }
 }
 
-customElements.define("mercedes-trips-card", MercedesTripsCard);
+// HA can load this script through more than one path at once — the
+// add_extra_js_url injection AND the registered Lovelace resource both
+// point at the same URL. HA normally isolates that with a scoped custom
+// element registry, but when that polyfill isn't available the second
+// execution's define() throws "already been used with this registry" and
+// aborts before window.customCards.push() below ever runs, which is why
+// the card can silently fail to mount even though the first load
+// registered it fine. Guard it so a duplicate load is a harmless no-op.
+if (!customElements.get("mercedes-trips-card")) {
+  customElements.define("mercedes-trips-card", MercedesTripsCard);
+}
 
 window.customCards = window.customCards || [];
-window.customCards.push({
-  type: "mercedes-trips-card",
-  name: "Mercedes Trips",
-  description: "Mapa de trayectos con filtros rápidos y estadísticas comparativas para Mercedes EQB",
-  preview: false,
-});
+if (!window.customCards.some(c => c.type === "mercedes-trips-card")) {
+  window.customCards.push({
+    type: "mercedes-trips-card",
+    name: "Mercedes Trips",
+    description: "Mapa de trayectos con filtros rápidos y estadísticas comparativas para Mercedes EQB",
+    preview: false,
+  });
+}
