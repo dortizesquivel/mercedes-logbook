@@ -408,6 +408,10 @@ class MercedesTripsCard extends HTMLElement {
         }
         .trip-row:hover { background: rgba(127,127,127,0.08); }
         .trip-row.selected { background: rgba(127,127,127,0.14); }
+        /* Mirrors the map dimming: once something's selected, everything
+           else steps back so the pair (row + route) reads as one unit. */
+        .trip-list.has-selection .trip-row:not(.selected) { opacity: .45; }
+        .trip-list.has-selection .trip-row:not(.selected):hover { opacity: .75; }
 
         /* route glyph: start · spine · end — echoes the polyline on the map */
         .glyph { width: 12px; height: 32px; position: relative; margin: 0 auto; }
@@ -736,6 +740,12 @@ class MercedesTripsCard extends HTMLElement {
 
     if (seq !== this._fetchSeq) return; // a newer filter already superseded this one
 
+    // A selection from a previous filter that fell out of the new range
+    // would otherwise leave every route/row dimmed with nothing highlighted.
+    if (this._selectedTrip && !this._trips.some(t => t.id === this._selectedTrip.id)) {
+      this._selectedTrip = null;
+    }
+
     this._prevTotals = null;
     this._prevLabel = (QUICK_FILTERS.find(f => f.key === this._quickFilter) || {}).deltaLabel || "vs. periodo anterior";
     this._renderInstrument();
@@ -884,6 +894,7 @@ class MercedesTripsCard extends HTMLElement {
 
     this._mapLayers.forEach(l => l.remove());
     this._mapLayers = [];
+    this._mapLayersByTrip = new Map();
 
     let bounds = null;
     const extendBounds = (pts) => {
@@ -916,10 +927,13 @@ class MercedesTripsCard extends HTMLElement {
         points = sampled;
       }
 
+      const layers = {};
+
       if (points.length >= 2) {
         const line = this._L.polyline(points, { color, weight: 3, opacity: 0.85 }).addTo(this._map);
         line.on("click", () => this._selectTrip(trip));
         this._mapLayers.push(line);
+        layers.line = line;
         extendBounds(points);
       }
 
@@ -933,6 +947,7 @@ class MercedesTripsCard extends HTMLElement {
         );
         m.on("click", () => this._selectTrip(trip));
         this._mapLayers.push(m);
+        layers.startMarker = m;
       }
       if (trip.end_lat && trip.end_lon) {
         const m = this._L.circleMarker([trip.end_lat, trip.end_lon], {
@@ -940,14 +955,40 @@ class MercedesTripsCard extends HTMLElement {
         }).addTo(this._map);
         m.on("click", () => this._selectTrip(trip));
         this._mapLayers.push(m);
+        layers.endMarker = m;
       }
+
+      this._mapLayersByTrip.set(trip.id, layers);
     });
 
     if (bounds) {
       try { this._map.fitBounds(bounds, { padding: [20, 20] }); } catch(_) {}
     }
 
+    this._applyMapSelection();
     setTimeout(() => this._map && this._map.invalidateSize(), 150);
+  }
+
+  // Dims every trip on the map except the selected one (thicker line,
+  // brought to front) so it's unambiguous which route is which once more
+  // than a couple overlap. No-op (everything back to full opacity) when
+  // nothing is selected.
+  _applyMapSelection() {
+    if (!this._mapLayersByTrip) return;
+    const selectedId = this._selectedTrip ? this._selectedTrip.id : null;
+    this._mapLayersByTrip.forEach(({ line, startMarker, endMarker }, id) => {
+      const isSelected = selectedId != null && id === selectedId;
+      const dimmed = selectedId != null && !isSelected;
+      if (line) {
+        line.setStyle({ opacity: dimmed ? 0.15 : 0.9, weight: isSelected ? 5 : 3 });
+        if (isSelected) line.bringToFront();
+      }
+      [startMarker, endMarker].forEach(m => {
+        if (!m) return;
+        m.setStyle({ opacity: dimmed ? 0.25 : 1, fillOpacity: dimmed ? 0.25 : 1 });
+        if (isSelected) m.bringToFront();
+      });
+    });
   }
 
   _renderList() {
@@ -968,6 +1009,7 @@ class MercedesTripsCard extends HTMLElement {
       return;
     }
 
+    list.classList.toggle("has-selection", !!this._selectedTrip);
     list.innerHTML = this._trips.map((trip, i) => {
       const color = ROUTE_COLORS[i % ROUTE_COLORS.length];
       const sel = this._selectedTrip && this._selectedTrip.id === trip.id ? " selected" : "";
@@ -1001,11 +1043,17 @@ class MercedesTripsCard extends HTMLElement {
   }
 
   _selectTrip(trip) {
-    this._selectedTrip = trip;
+    // Clicking the already-selected trip again deselects it — the only way
+    // back to seeing every route at full opacity without changing filters.
+    const deselecting = this._selectedTrip && this._selectedTrip.id === trip.id;
+    this._selectedTrip = deselecting ? null : trip;
     this._renderList();
-    this._renderDetailPanel(trip);
+    this._renderDetailPanel(this._selectedTrip);
 
     if (!this._map || !this._L) return;
+    this._applyMapSelection();
+    if (deselecting) return;
+
     const pts = (trip.waypoints || []).filter(w => w && w.length >= 2).map(w => [w[0], w[1]]);
     const fallback = [
       trip.start_lat && trip.start_lon ? [trip.start_lat, trip.start_lon] : null,
