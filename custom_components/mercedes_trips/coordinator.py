@@ -243,6 +243,49 @@ class TripCoordinator:
         finally:
             conn.close()
 
+    def get_trip_totals(
+        self,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        hour_start: int | None = None,
+        hour_end: int | None = None,
+    ) -> dict:
+        """Aggregate totals for a date/hour range, without the waypoints payload.
+
+        Mirrors get_trips()'s WHERE clause so the same filters used to list
+        trips can be reused for a lightweight comparison (e.g. "previous
+        period" deltas) without transferring every row's full waypoints.
+        """
+        conn = sqlite3.connect(self._db_path)
+        try:
+            where_clauses = []
+            params: list = []
+            if start_date:
+                where_clauses.append("start_time >= ?")
+                params.append(start_date)
+            if end_date:
+                where_clauses.append("start_time <= ?")
+                params.append(end_date + "T23:59:59")
+            if hour_start is not None:
+                where_clauses.append("CAST(strftime('%H', start_time) AS INTEGER) >= ?")
+                params.append(hour_start)
+            if hour_end is not None:
+                where_clauses.append("CAST(strftime('%H', start_time) AS INTEGER) <= ?")
+                params.append(hour_end)
+
+            where = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+            row = conn.execute(
+                f"SELECT COUNT(*), SUM(distance_km), SUM(kwh_used) FROM trips {where}",
+                params,
+            ).fetchone()
+            return {
+                "trip_count": row[0] or 0,
+                "distance_km": row[1] or 0,
+                "kwh_used": row[2] or 0,
+            }
+        finally:
+            conn.close()
+
     def get_stats(self) -> dict:
         conn = sqlite3.connect(self._db_path)
         try:

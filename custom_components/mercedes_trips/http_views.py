@@ -69,6 +69,41 @@ class TripsListView(HomeAssistantView):
         )
 
 
+class TripTotalsView(HomeAssistantView):
+    """Aggregate totals for a date/hour range — no waypoints, cheap to poll.
+
+    Used by the card to compute the "vs. previous period" delta on the
+    instrument strip without re-downloading full trip rows for a range the
+    user isn't even looking at.
+    """
+
+    url = "/api/mercedes_trips/totals"
+    name = "api:mercedes_trips:totals"
+    requires_auth = True
+
+    async def get(self, request: web.Request) -> web.Response:
+        hass: HomeAssistant = request.app["hass"]
+        coordinator = _get_coordinator(hass)
+        if coordinator is None:
+            return web.Response(status=503, text="Integration not loaded")
+
+        try:
+            start_date = request.rel_url.query.get("start_date")
+            end_date = request.rel_url.query.get("end_date")
+            hour_start = request.rel_url.query.get("hour_start")
+            hour_end = request.rel_url.query.get("hour_end")
+
+            hour_start = int(hour_start) if hour_start is not None else None
+            hour_end = int(hour_end) if hour_end is not None else None
+        except (ValueError, TypeError) as exc:
+            return web.Response(status=400, text=str(exc))
+
+        totals = await hass.async_add_executor_job(
+            coordinator.get_trip_totals, start_date, end_date, hour_start, hour_end
+        )
+        return web.Response(content_type="application/json", text=json.dumps(totals))
+
+
 class TripDetailView(HomeAssistantView):
     url = "/api/mercedes_trips/trips/{trip_id}"
     name = "api:mercedes_trips:trip_detail"

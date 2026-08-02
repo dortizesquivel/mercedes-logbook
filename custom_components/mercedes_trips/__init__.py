@@ -15,7 +15,7 @@ from homeassistant.helpers.typing import ConfigType
 
 from .const import DOMAIN
 from .coordinator import TripCoordinator
-from .http_views import TripDetailView, TripsListView
+from .http_views import TripDetailView, TripsListView, TripTotalsView
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -87,6 +87,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.http.register_view(MercedesTripsCardView)
     hass.http.register_view(TripsListView)
     hass.http.register_view(TripDetailView)
+    hass.http.register_view(TripTotalsView)
 
     # Inject JS into frontend — tried in order, first success wins
     _inject_frontend_js(hass)
