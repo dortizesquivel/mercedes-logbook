@@ -28,7 +28,8 @@
       "entity_not_found": "Entity not found in Home Assistant"
     },
     "abort": {
-      "already_configured": "Mercedes Trips is already set up"
+      "already_configured": "Mercedes Trips is already set up",
+      "single_instance_allowed": "Mercedes Trips is already set up; it logs one car per Home Assistant."
     }
   },
   "options": {

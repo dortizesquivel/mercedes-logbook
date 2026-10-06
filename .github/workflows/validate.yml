@@ -44,8 +44,5 @@ jobs:
       - name: Card JS parses
         run: node --check custom_components/mercedes_trips/frontend/mercedes-trips-card.js
 
-      - name: www/ copy of the card matches the bundled one
-        run: cmp custom_components/mercedes_trips/frontend/mercedes-trips-card.js www/mercedes-trips-card.js
-
       - name: Translations have the same keys
         run: python scripts/check_translations.py

@@ -10,5 +10,6 @@
   "iot_class": "calculated",
   "issue_tracker": "https://github.com/dortizesquivel/mercedes-logbook/issues",
   "requirements": [],
+  "single_config_entry": true,
   "version": "1.4.0"
 }
