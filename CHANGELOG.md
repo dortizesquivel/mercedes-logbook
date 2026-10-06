@@ -2,6 +2,17 @@
 
 Versions before v1.4.0 are summarised from their GitHub release titles; the release pages have the details.
 
+## v1.4.0 - 2026-10-06
+
+- Start trips on real odometer movement; fix a crash when a trip closes (e8647e2)
+- README: demo GIF, current screenshots, generic setup instructions (254e674)
+- Add brand icon, HACS/hassfest validation and a release workflow (8a46bad)
+- Fix "Configuration error" when the card's script beats HA's app bundle (b07debd)
+- Card UI in English and Spanish, following the HA user's language (6fe9a47)
+- Register the card and views in async_setup; fix the resources lookup (1fa1e1c)
+- Fix hour filter off by the UTC offset and trip detail returning 404 (c56b0da)
+- Make setup generic: detect the car's mbapi2020 entities, no EQB defaults (4ae87c6)
+
 ## v1.3.0 - 2026-10-06
 
 - Logbook redesign
