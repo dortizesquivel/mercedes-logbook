@@ -2,6 +2,14 @@
 
 Versions before v1.4.0 are summarised from their GitHub release titles; the release pages have the details.
 
+## v1.5.0 - 2026-10-06
+
+- Demo and README screenshots use public places in Madrid (03b0d76)
+- Require HA 2026.3; single config entry; drop the unused www/ copy (43b1d01)
+- Geocode through HA's aiohttp session; stop caching failed lookups (7445a14)
+- Stop loading Leaflet and fonts from CDNs; fix card requests after 30 min (6dde291)
+- Bump the actions group with 3 updates (#1) (73dab7c)
+
 ## v1.4.0 - 2026-10-06
 
 - Start trips on real odometer movement; fix a crash when a trip closes (e8647e2)
