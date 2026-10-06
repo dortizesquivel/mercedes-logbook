@@ -71,7 +71,9 @@ def _odometer_km(state) -> float | None:
     if state is None or state.state in ("unknown", "unavailable"):
         return None
     value = _safe_float(state.state)
-    if value is not None and state.attributes.get("unit_of_measurement") == "mi":
+    if value is None or value <= 0:
+        return None  # no real car reads 0; treat it as a glitch, not a reading
+    if state.attributes.get("unit_of_measurement") == "mi":
         value *= _KM_PER_MILE
     return value
 
@@ -95,6 +97,9 @@ class TripCoordinator:
         }
         self._last_trip_cache: dict | None = None
         self._last_geocode_request = 0.0
+        # Last valid odometer reading, so a trip starts on real forward
+        # movement rather than on whatever reading comes first.
+        self._last_odometer: float | None = None
 
     # ── Setup / teardown ──────────────────────────────────────────────────────
 
@@ -102,6 +107,7 @@ class TripCoordinator:
         await self.hass.async_add_executor_job(self._init_db)
         self._active_trip = await self._store.async_load() or None
         await self._refresh_cache()
+        self._last_odometer = self._get_odometer()
 
         if self._active_trip:
             _LOGGER.info("Mercedes Trips: recovered in-progress trip from storage")
@@ -472,16 +478,27 @@ class TripCoordinator:
         new_odo = _odometer_km(event.data.get("new_state"))
         if new_odo is None:
             return
+        prev_odo = self._last_odometer
+        if prev_odo is not None and new_odo < prev_odo - 0.05:
+            # Odometers don't run backwards; keep the baseline we trust.
+            _LOGGER.debug("Mercedes Trips: ignoring odometer going back %.1f → %.1f", prev_odo, new_odo)
+            return
+        self._last_odometer = new_odo
 
-        self.hass.async_create_task(self._process_odometer_change(new_odo))
+        self.hass.async_create_task(self._process_odometer_change(new_odo, prev_odo))
 
-    async def _process_odometer_change(self, new_odo: float) -> None:
+    async def _process_odometer_change(self, new_odo: float, prev_odo: float | None) -> None:
         async with self._lock:
             now_iso = dt_util.now().isoformat()
 
             if self._active_trip is None:
-                # Check if this is genuine movement (not just a stale first reading)
-                await self._start_trip(new_odo, now_iso)
+                # The first reading after HA starts, or after the car comes
+                # back from unavailable, is only a baseline — not a trip.
+                if prev_odo is None or new_odo <= prev_odo + 0.05:
+                    return
+                # Start from the reading before the movement, so the
+                # distance up to the first update isn't lost.
+                await self._start_trip(prev_odo, new_odo, now_iso)
                 return
 
             stable_odo = self._active_trip.get("stable_odometer", self._active_trip["start_odometer"])
@@ -491,7 +508,7 @@ class TripCoordinator:
                 await self._store.async_save(self._active_trip)
                 _LOGGER.debug("Mercedes Trips: movement detected, odo=%.1f km", new_odo)
 
-    async def _start_trip(self, odometer: float, now_iso: str) -> None:
+    async def _start_trip(self, odometer: float, current_odometer: float, now_iso: str) -> None:
         gps = self._get_gps()
         soc = self._get_soc()
 
@@ -503,7 +520,7 @@ class TripCoordinator:
         self._active_trip = {
             "start_time": now_iso,
             "start_odometer": odometer,
-            "stable_odometer": odometer,
+            "stable_odometer": current_odometer,
             "start_soc": soc,
             "start_lat": gps[0] if gps else None,
             "start_lon": gps[1] if gps else None,
@@ -523,6 +540,9 @@ class TripCoordinator:
         if self._active_trip is None:
             return
         async with self._lock:
+            # Checked again: the trip may have closed while waiting for the lock.
+            if self._active_trip is None:
+                return
             gps = self._get_gps()
             if gps is None:
                 return
@@ -541,6 +561,8 @@ class TripCoordinator:
         if self._active_trip is None:
             return
         async with self._lock:
+            if self._active_trip is None:  # closed while waiting for the lock
+                return
             timeout_min = self._config.get(CONF_INACTIVITY_TIMEOUT, 8)
             last_movement = self._active_trip.get("last_movement")
             if last_movement is None:
