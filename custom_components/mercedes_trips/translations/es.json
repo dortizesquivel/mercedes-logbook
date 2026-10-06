@@ -1,0 +1,92 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Mercedes Trips",
+        "description": "Registra cada trayecto de tu Mercedes a partir de las entidades de Mercedes me (mbapi2020). Si esa integración está configurada, sus entidades ya vienen seleccionadas.",
+        "data": {
+          "odometer_entity": "Sensor de odómetro",
+          "tracker_entity": "Localizador GPS",
+          "soc_entity": "Sensor de batería (SoC %)",
+          "range_entity": "Sensor de autonomía eléctrica",
+          "battery_capacity_kwh": "Capacidad útil de la batería",
+          "inactivity_timeout_min": "Tiempo de inactividad",
+          "min_trip_distance_km": "Distancia mínima de trayecto"
+        },
+        "data_description": {
+          "odometer_entity": "El odómetro del coche, p. ej. `sensor.…_odometer` de Mercedes me (mbapi2020). Los trayectos empiezan y terminan según sus cambios.",
+          "tracker_entity": "El device_tracker del coche, para la ruta y las direcciones de salida y llegada.",
+          "soc_entity": "Nivel de carga en %, para calcular la energía de cada trayecto.",
+          "range_entity": "Opcional.",
+          "battery_capacity_kwh": "Capacidad útil (neta) de la batería de tu coche. Si no la sabes, mira la tabla del README.",
+          "inactivity_timeout_min": "Un trayecto termina tras estos minutos sin cambios en el odómetro.",
+          "min_trip_distance_km": "Los trayectos más cortos se descartan como ruido del GPS u odómetro."
+        }
+      }
+    },
+    "error": {
+      "entity_not_found": "Entidad no encontrada en Home Assistant"
+    },
+    "abort": {
+      "already_configured": "Mercedes Trips ya está configurado"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Mercedes Trips",
+        "description": "Los cambios se aplican al momento; los trayectos ya registrados conservan sus valores.",
+        "data": {
+          "odometer_entity": "Sensor de odómetro",
+          "tracker_entity": "Localizador GPS",
+          "soc_entity": "Sensor de batería (SoC %)",
+          "range_entity": "Sensor de autonomía eléctrica",
+          "battery_capacity_kwh": "Capacidad útil de la batería",
+          "inactivity_timeout_min": "Tiempo de inactividad",
+          "min_trip_distance_km": "Distancia mínima de trayecto"
+        },
+        "data_description": {
+          "odometer_entity": "El odómetro del coche, p. ej. `sensor.…_odometer` de Mercedes me (mbapi2020). Los trayectos empiezan y terminan según sus cambios.",
+          "tracker_entity": "El device_tracker del coche, para la ruta y las direcciones de salida y llegada.",
+          "soc_entity": "Nivel de carga en %, para calcular la energía de cada trayecto.",
+          "range_entity": "Opcional.",
+          "battery_capacity_kwh": "Capacidad útil (neta) de la batería de tu coche. Si no la sabes, mira la tabla del README.",
+          "inactivity_timeout_min": "Un trayecto termina tras estos minutos sin cambios en el odómetro.",
+          "min_trip_distance_km": "Los trayectos más cortos se descartan como ruido del GPS u odómetro."
+        }
+      }
+    },
+    "error": {
+      "entity_not_found": "Entidad no encontrada en Home Assistant"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "distance_month": {
+        "name": "Distancia este mes"
+      },
+      "distance_year": {
+        "name": "Distancia este año"
+      },
+      "kwh_month": {
+        "name": "kWh consumidos este mes"
+      },
+      "avg_consumption": {
+        "name": "Consumo medio mensual"
+      },
+      "total_trips": {
+        "name": "Total trayectos"
+      },
+      "last_trip": {
+        "name": "Último trayecto"
+      },
+      "active_trip": {
+        "name": "Trayecto en curso",
+        "state": {
+          "active": "En ruta",
+          "idle": "Aparcado"
+        }
+      }
+    }
+  }
+}
