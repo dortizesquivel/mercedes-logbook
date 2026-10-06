@@ -4,7 +4,7 @@
 [![GitHub release](https://img.shields.io/github/release/dortizesquivel/mercedes-logbook.svg)](https://github.com/dortizesquivel/mercedes-logbook/releases)
 [![Validate](https://github.com/dortizesquivel/mercedes-logbook/actions/workflows/validate.yml/badge.svg)](https://github.com/dortizesquivel/mercedes-logbook/actions/workflows/validate.yml)
 [![License: MIT](https://img.shields.io/github/license/dortizesquivel/mercedes-logbook.svg)](LICENSE)
-[![HA Version](https://img.shields.io/badge/Home%20Assistant-2024.1%2B-blue.svg)](https://www.home-assistant.io/)
+[![HA Version](https://img.shields.io/badge/Home%20Assistant-2026.3%2B-blue.svg)](https://www.home-assistant.io/)
 
 Automatically log every trip of your Mercedes electric or plug-in hybrid in Home Assistant: start and end time, distance, energy used, the GPS route and the start/end addresses, kept in a local SQLite database that the recorder never purges.
 
@@ -22,7 +22,9 @@ It comes with a dashboard card: every trip on a map, quick period filters, a log
 
 ## ⚠️ Required dependency: mbapi2020
 
-**This integration reads its data from [mbapi2020](https://github.com/ReneNulschDE/mbapi2020)** (Mercedes me), a separate HACS integration that connects your car to Home Assistant. Install and set it up first. Mercedes Trips uses these of its entities:
+**This integration reads its data from [mbapi2020](https://github.com/ReneNulschDE/mbapi2020)** (Mercedes me), a separate HACS integration that connects your car to Home Assistant. Install and set it up first.
+
+Mercedes Trips doesn't replace it or talk to Mercedes itself: mbapi2020 shows the car's live state, and Mercedes Trips turns the changes in that state into a logbook of trips with their routes, energy and history. It uses these mbapi2020 entities:
 
 | Entity | Example entity ID |
 |---|---|
@@ -58,7 +60,7 @@ It comes with a dashboard card: every trip on a map, quick period filters, a log
 
 ## Requirements
 
-- Home Assistant 2024.1 or newer
+- Home Assistant 2026.3 or newer
 - [HACS](https://hacs.xyz/)
 - [mbapi2020](https://github.com/ReneNulschDE/mbapi2020) set up (see above)
 - A Mercedes electric or plug-in hybrid with an active Mercedes me connect subscription
@@ -182,9 +184,9 @@ curl -H "Authorization: Bearer YOUR_TOKEN" \
       "distance_km": 15.4,
       "kwh_used": 3.2,
       "avg_kwh_per_100km": 20.8,
-      "start_address": "Calle Mayor 1, Algeciras",
-      "end_address": "Av. Principal 5, La Línea",
-      "waypoints": [[36.13, -5.45, "2026-07-12T10:00:00"], "..."]
+      "start_address": "Calle de Alcalá, 42, Centro, Madrid",
+      "end_address": "Plaza de Cervantes, Alcalá de Henares",
+      "waypoints": [[40.4183, -3.6966, "2026-07-12T10:00:00"], "..."]
     }
   ],
   "stats": {
@@ -266,7 +268,7 @@ Approximate usable capacities; check the spec sheet for your model year, as they
 4. **After the trip**: distance and kWh are calculated, the start and end are geocoded and the trip is saved to SQLite
 5. **Noise filtering**: trips shorter than the minimum distance are discarded
 
-**What leaves your Home Assistant:** the start and end coordinates of each trip go to OpenStreetMap's Nominatim to get the addresses (once per place, then cached), and the card loads map tiles from OpenStreetMap, Leaflet from unpkg.com and its display font from Google Fonts. Nothing else is sent anywhere.
+**What leaves your Home Assistant:** the start and end coordinates of each trip go to OpenStreetMap's Nominatim to get the addresses (once per place, then cached), and the card loads its map tiles from OpenStreetMap. Nothing else is sent anywhere: Leaflet and the card's font ship with the integration.
 
 **Limitations:** one car per Home Assistant install, and the card shows distances in km.
 
