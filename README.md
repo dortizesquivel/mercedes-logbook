@@ -104,15 +104,16 @@ Add the card to any dashboard:
 
 ```yaml
 type: custom:mercedes-trips-card
+title: Cuaderno de ruta  # optional
 ```
 
 ### Card features
 
-- **Map**: trips as colored polylines — click any trip to zoom in and view details
-- **Filters**: by start date, end date, start hour and end hour
-- **Stats bar**: km this month, km this year, kWh this month, avg consumption
-- **Trip list**: origin → destination, duration, km, kWh, date
-- **Detail panel**: distance, energy, consumption, SoC used, GPS points, odometer start/end
+- **Map**: trips as colored polylines — click any trip to zoom in and dim the rest. Darkened tiles when HA is in dark mode
+- **Filters**: quick periods (today, yesterday, 7 days, this/last month, this year) plus a custom date and hour range
+- **Readout**: distance, trips, energy and average consumption for the period, each compared with the same-length period right before it
+- **Logbook**: trips grouped by day with a daily km total. Each trip shows start/end time and street, km and kWh, and its rail matches its line color on the map
+- **Trip detail**: opens inline under the trip with full addresses, duration, consumption, battery used and odometer
 
 ---
 

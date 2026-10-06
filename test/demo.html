@@ -2,25 +2,49 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
+  <!-- Same referrer policy as HA's own index.html, so the map tiles are
+       tested under the conditions they really load in. -->
+  <meta name="referrer" content="same-origin">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Mercedes Trips Card — Demo</title>
   <style>
+    /* Stand-ins for the HA theme variables the card reads. Dark by
+       default; open with ?theme=light for the light theme and ?w=360 to
+       squeeze the card to a phone-width column. */
     body {
+      --primary-color: #4c7bf4;
+      --text-primary-color: #fff;
+      --card-background-color: #262b3d;
+      --secondary-background-color: #1d2130;
+      --primary-text-color: #e8eaf0;
+      --secondary-text-color: #9aa0b4;
+      --divider-color: rgba(232, 234, 240, 0.12);
+      --success-color: #43a047;
+      --error-color: #e5534b;
+      --primary-font-family: Roboto, -apple-system, "Segoe UI", sans-serif;
       margin: 0;
       padding: 20px;
-      background: #111;
-      font-family: sans-serif;
+      background: #1d2130;
+      font-family: var(--primary-font-family);
       min-height: 100vh;
+    }
+    body.light {
+      --primary-color: #03a9f4;
+      --card-background-color: #fff;
+      --secondary-background-color: #e5e5e5;
+      --primary-text-color: #212121;
+      --secondary-text-color: #727272;
+      --divider-color: rgba(0, 0, 0, 0.12);
+      background: #fafafa;
     }
     .container {
       max-width: 520px;
       margin: 0 auto;
     }
     h1 {
-      color: #fff;
+      color: var(--secondary-text-color);
       font-size: 1rem;
       margin-bottom: 16px;
-      opacity: 0.6;
     }
     mercedes-trips-card {
       display: block;
@@ -30,93 +54,77 @@
 <body>
   <div class="container">
     <h1>Mercedes Trips — Local Demo</h1>
-    <mercedes-trips-card></mercedes-trips-card>
   </div>
 
   <script>
-    // ── Mock fetch so the card gets realistic data without a real HA instance ──
-    const MOCK_TRIPS = [
-      {
-        id: 1,
-        start_time: "2026-07-10T08:15:00",
-        end_time:   "2026-07-10T08:52:00",
-        start_odometer: 14230, end_odometer: 14265,
-        distance_km: 35.2,
-        start_soc: 88, end_soc: 74, soc_used: 14,
-        kwh_used: 7.1, avg_kwh_per_100km: 20.2,
-        start_lat: 36.1408, start_lon: -5.4525,
-        end_lat:   36.7213, end_lon:  -4.4214,
-        start_address: "Algeciras, Cádiz",
-        end_address:   "Málaga, Málaga",
-        waypoints: [
-          [36.1408, -5.4525, "2026-07-10T08:15:00"],
-          [36.2500, -5.2800, "2026-07-10T08:22:00"],
-          [36.3800, -5.0200, "2026-07-10T08:30:00"],
-          [36.5200, -4.8000, "2026-07-10T08:40:00"],
-          [36.6400, -4.6000, "2026-07-10T08:48:00"],
-          [36.7213, -4.4214, "2026-07-10T08:52:00"],
-        ],
-      },
-      {
-        id: 2,
-        start_time: "2026-07-11T10:05:00",
-        end_time:   "2026-07-11T10:28:00",
-        start_odometer: 14265, end_odometer: 14279,
-        distance_km: 14.0,
-        start_soc: 72, end_soc: 66, soc_used: 6,
-        kwh_used: 2.9, avg_kwh_per_100km: 20.7,
-        start_lat: 36.7213, start_lon: -4.4214,
-        end_lat:   36.6500, end_lon:  -4.5100,
-        start_address: "Málaga Centro",
-        end_address:   "Torremolinos",
-        waypoints: [
-          [36.7213, -4.4214, "2026-07-11T10:05:00"],
-          [36.7000, -4.4500, "2026-07-11T10:12:00"],
-          [36.6700, -4.4800, "2026-07-11T10:20:00"],
-          [36.6500, -4.5100, "2026-07-11T10:28:00"],
-        ],
-      },
-      {
-        id: 3,
-        start_time: "2026-07-12T07:30:00",
-        end_time:   "2026-07-12T08:15:00",
-        start_odometer: 14279, end_odometer: 14307,
-        distance_km: 28.0,
-        start_soc: 65, end_soc: 55, soc_used: 10,
-        kwh_used: 5.3, avg_kwh_per_100km: 18.9,
-        start_lat: 36.6500, start_lon: -4.5100,
-        end_lat:   36.5144, end_lon:  -6.2894,
-        start_address: "Torremolinos",
-        end_address:   "Jerez de la Frontera",
-        waypoints: [
-          [36.6500, -4.5100, "2026-07-12T07:30:00"],
-          [36.6000, -4.9000, "2026-07-12T07:42:00"],
-          [36.5500, -5.3000, "2026-07-12T07:55:00"],
-          [36.5000, -5.8000, "2026-07-12T08:08:00"],
-          [36.5144, -6.2894, "2026-07-12T08:15:00"],
-        ],
-      },
-    ];
+    const qs = new URLSearchParams(location.search);
+    const DARK = qs.get("theme") !== "light";
+    if (!DARK) document.body.classList.add("light");
+    if (qs.get("w")) document.querySelector(".container").style.maxWidth = `${qs.get("w")}px`;
 
-    const MOCK_RESPONSE = {
-      trips: MOCK_TRIPS,
-      stats: {
-        distance_this_month: 77.2,
-        distance_this_year:  342.5,
-        kwh_this_month:      15.3,
-        avg_kwh_per_100km:   19.8,
-        total_trips:         3,
-      },
-      active_trip: null,
+    // ── Mock fetch so the card gets realistic data without a real HA instance ──
+    // Trips are generated relative to today so "Hoy", "Ayer" and the
+    // default 7-day filter always have something to show. Addresses use
+    // the same "road, [number,] suburb, town" shape the coordinator stores.
+    const PLACES = {
+      casa:      { lat: 36.1662, lon: -5.3475, addr: "Calle Clavel, 14, San Bernardo, La Línea de la Concepción" },
+      colegio:   { lat: 36.1735, lon: -5.3520, addr: "Avenida de España, Junquillos, La Línea de la Concepción" },
+      mercado:   { lat: 36.1610, lon: -5.3460, addr: "Calle Real, Centro, La Línea de la Concepción" },
+      gimnasio:  { lat: 36.1768, lon: -5.3420, addr: "Avenida Príncipe de Asturias, Julián Besteiro, La Línea de la Concepción" },
+      algeciras: { lat: 36.1325, lon: -5.4510, addr: "Avenida Virgen del Carmen, El Rinconcillo, Algeciras" },
+      sanroque:  { lat: 36.2120, lon: -5.3840, addr: "Calle General Lacy, San Roque" },
+      malaga:    { lat: 36.7190, lon: -4.4200, addr: "Paseo de los Tilos, Málaga" },
     };
+    const PLAN = [
+      // [days ago, start "HH:MM", minutes, from, to, km, kWh]
+      [0, "07:35", 31, "casa", "algeciras", 18, 3.3],
+      [0, "08:39", 17, "algeciras", "sanroque", 12, 2.0],
+      [0, "09:19", 15, "sanroque", "gimnasio", 9, 1.3],
+      [0, "09:57", 25, "gimnasio", "casa", 3, 0.7],
+      [1, "19:40", 30, "casa", "mercado", 2.4, 0.7],
+      [1, "22:34", 22, "mercado", "casa", 2.6, 0.7],
+      [2, "08:05", 12, "casa", "colegio", 2, 0.7],
+      [2, "13:50", 14, "colegio", "casa", 2, 0.7],
+      [3, "10:10", 95, "casa", "malaga", 121.6, 21.9],
+      [3, "18:30", 102, "malaga", "casa", 122.1, 23.3],
+      [5, "08:02", 11, "casa", "colegio", 2, 0.7],
+      [5, "17:15", 26, "colegio", "algeciras", 19.5, 3.3],
+    ];
+    const today = new Date();
+    const at = (daysAgo, hhmm, plusMin = 0) => {
+      const [h, m] = hhmm.split(":").map(Number);
+      const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - daysAgo, h, m + plusMin);
+      return d.toISOString();
+    };
+    const MOCK_TRIPS = PLAN.map(([ago, hhmm, mins, from, to, km, kwh], i) => {
+      const a = PLACES[from], b = PLACES[to];
+      const waypoints = Array.from({ length: 6 }, (_, k) => {
+        const f = k / 5, bend = Math.sin(f * Math.PI) * 0.01 * (i % 2 ? 1 : -1);
+        return [a.lat + (b.lat - a.lat) * f + bend, a.lon + (b.lon - a.lon) * f - bend, at(ago, hhmm, Math.round(mins * f))];
+      });
+      return {
+        id: i + 1,
+        start_time: at(ago, hhmm), end_time: at(ago, hhmm, mins),
+        start_odometer: 27310 + i * 20, end_odometer: 27310 + i * 20 + Math.round(km),
+        distance_km: km, soc_used: Math.round(kwh / 0.665), kwh_used: kwh,
+        avg_kwh_per_100km: Math.round((kwh / km) * 1000) / 10,
+        start_lat: a.lat, start_lon: a.lon, end_lat: b.lat, end_lon: b.lon,
+        start_address: a.addr, end_address: b.addr,
+        waypoints,
+      };
+    }).sort((x, y) => y.start_time.localeCompare(x.start_time));
 
     const _realFetch = window.fetch.bind(window);
     window.fetch = function(url, opts) {
       if (url.startsWith("/api/mercedes_trips/trips")) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve(MOCK_RESPONSE),
-        });
+        const p = new URL(url, location.origin).searchParams;
+        const s = p.get("start_date"), e = p.get("end_date");
+        const local = iso => { const d = new Date(iso); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+        const trips = MOCK_TRIPS.filter(t => (!s || local(t.start_time) >= s) && (!e || local(t.start_time) <= e));
+        return new Promise(r => setTimeout(() => r({ ok: true, json: () => Promise.resolve({ trips, active_trip: null }) }), 250));
+      }
+      if (url.startsWith("/api/mercedes_trips/totals")) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ trip_count: 9, distance_km: 268.4, kwh_used: 51.2 }) });
       }
       return _realFetch(url, opts);
     };
@@ -136,6 +144,7 @@
     card.hass = {
       auth: { data: { access_token: "demo-token" } },
       states: {},
+      themes: { darkMode: DARK },
     };
     document.querySelector(".container").appendChild(card);
   </script>
