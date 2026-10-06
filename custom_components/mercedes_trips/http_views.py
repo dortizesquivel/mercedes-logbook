@@ -124,9 +124,7 @@ class TripDetailView(HomeAssistantView):
         except ValueError:
             return web.Response(status=400, text="Invalid trip_id")
 
-        trips = await hass.async_add_executor_job(coordinator.get_trips, 1, 0)
-        # get specific trip from db
-        trip = next((t for t in trips if t.get("id") == tid), None)
+        trip = await hass.async_add_executor_job(coordinator.get_trip, tid)
         if trip is None:
             return web.Response(status=404, text="Trip not found")
 
