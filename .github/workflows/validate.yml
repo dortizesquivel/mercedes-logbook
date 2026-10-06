@@ -1,0 +1,51 @@
+name: Validate
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  hacs:
+    name: HACS
+    runs-on: ubuntu-latest
+    steps:
+      - uses: hacs/action@main
+        with:
+          category: integration
+
+  hassfest:
+    name: Hassfest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: home-assistant/actions/hassfest@master
+
+  checks:
+    name: Code checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Python compiles
+        run: python -m compileall -q custom_components
+
+      - name: Card JS parses
+        run: node --check custom_components/mercedes_trips/frontend/mercedes-trips-card.js
+
+      - name: www/ copy of the card matches the bundled one
+        run: cmp custom_components/mercedes_trips/frontend/mercedes-trips-card.js www/mercedes-trips-card.js
+
+      - name: Translations have the same keys
+        run: python scripts/check_translations.py

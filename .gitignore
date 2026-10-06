@@ -3,3 +3,4 @@ __pycache__/
 .DS_Store
 *.db
 .playwright-mcp/
+release-notes.md
