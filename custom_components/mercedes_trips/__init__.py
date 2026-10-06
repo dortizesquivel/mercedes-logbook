@@ -10,6 +10,7 @@ from homeassistant.components.http import HomeAssistantView
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.typing import ConfigType
 
@@ -20,6 +21,8 @@ from .http_views import TripDetailView, TripsListView, TripTotalsView
 _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = ["sensor"]
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 FRONTEND_SCRIPT = "mercedes-trips-card.js"
 FRONTEND_URL = f"/{DOMAIN}/{FRONTEND_SCRIPT}"
@@ -72,6 +75,36 @@ class MercedesTripsCardView(HomeAssistantView):
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     hass.data.setdefault(DOMAIN, {})
+    # Once per HA run, not per config entry: an options change reloads the
+    # entry, and the views look the coordinator up on every request anyway.
+    # The card view goes first so the JS is servable as early as possible.
+    hass.http.register_view(MercedesTripsCardView)
+    hass.http.register_view(TripsListView)
+    hass.http.register_view(TripDetailView)
+    hass.http.register_view(TripTotalsView)
+
+    # Inject the card as early as this integration gets to run. The
+    # frontend is served from the start of HA's boot, and every page
+    # rendered before this point lacks the card's <script> until it is
+    # reloaded ("Configuration error" on the card) — so this happens here,
+    # before any config entry work, not after it.
+    #
+    # Injection methods are tried in order, first success wins. The
+    # Lovelace resource is only a FALLBACK for when none of those work, not
+    # a second, simultaneous injection: registering both makes the browser
+    # load the card twice per page view. Whichever path we're NOT using is
+    # actively cleaned up, so upgrading from an older version that always
+    # registered the resource doesn't leave a stale duplicate behind.
+    injected = _inject_frontend_js(hass)
+
+    @callback
+    def _on_ha_started(_event=None) -> None:
+        hass.async_create_task(_async_ensure_lovelace_resource(hass, add_new=not injected))
+
+    if hass.is_running:
+        hass.async_create_task(_async_ensure_lovelace_resource(hass, add_new=not injected))
+    else:
+        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _on_ha_started)
     return True
 
 
@@ -83,32 +116,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await coordinator.async_setup()
 
     hass.data[DOMAIN][entry.entry_id] = coordinator
-
-    hass.http.register_view(MercedesTripsCardView)
-    hass.http.register_view(TripsListView)
-    hass.http.register_view(TripDetailView)
-    hass.http.register_view(TripTotalsView)
-
-    # Inject JS into frontend — tried in order, first success wins. The
-    # Lovelace resource is only a FALLBACK for when none of those work, not
-    # a second, simultaneous injection: registering both makes the browser
-    # load the same <script type=module> twice for every page view, and on
-    # this integration's users we've seen that race get mishandled by HA's
-    # own service worker, intermittently failing to mount the card
-    # ("Error de configuración") depending on cache state. Whichever path
-    # we're NOT using also gets actively cleaned up, so upgrading from an
-    # older version that always registered the resource doesn't leave a
-    # stale duplicate behind.
-    injected = _inject_frontend_js(hass)
-
-    @callback
-    def _on_ha_started(_event=None) -> None:
-        hass.async_create_task(_async_ensure_lovelace_resource(hass, add_new=not injected))
-
-    if hass.is_running:
-        hass.async_create_task(_async_ensure_lovelace_resource(hass, add_new=not injected))
-    else:
-        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _on_ha_started)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
@@ -128,19 +135,19 @@ def _inject_frontend_js(hass: HomeAssistant) -> bool:
     try:
         from homeassistant.components.frontend import add_extra_js_url  # noqa: PLC0415
         add_extra_js_url(hass, FRONTEND_VERSIONED_URL, False)
-        _LOGGER.info("Mercedes Trips: JS inyectado via add_extra_js_url → %s", FRONTEND_VERSIONED_URL)
+        _LOGGER.info("Mercedes Trips: card JS injected via add_extra_js_url → %s", FRONTEND_VERSIONED_URL)
         return True
     except (ImportError, Exception) as exc:
-        _LOGGER.debug("Mercedes Trips: add_extra_js_url no disponible (%s)", exc)
+        _LOGGER.debug("Mercedes Trips: add_extra_js_url not available (%s)", exc)
 
     # Method B: async_register_extra_js_url (some HA versions)
     try:
         from homeassistant.components.frontend import async_register_extra_js_url  # noqa: PLC0415
         async_register_extra_js_url(hass, FRONTEND_VERSIONED_URL)
-        _LOGGER.info("Mercedes Trips: JS inyectado via async_register_extra_js_url → %s", FRONTEND_VERSIONED_URL)
+        _LOGGER.info("Mercedes Trips: card JS injected via async_register_extra_js_url → %s", FRONTEND_VERSIONED_URL)
         return True
     except (ImportError, Exception) as exc:
-        _LOGGER.debug("Mercedes Trips: async_register_extra_js_url no disponible (%s)", exc)
+        _LOGGER.debug("Mercedes Trips: async_register_extra_js_url not available (%s)", exc)
 
     # Method C: direct hass.data manipulation (fallback for edge cases)
     try:
@@ -151,14 +158,14 @@ def _inject_frontend_js(hass: HomeAssistant) -> bool:
         extra[:] = [u for u in extra if u != FRONTEND_URL and not u.startswith(FRONTEND_URL + "?")]
         if FRONTEND_VERSIONED_URL not in extra:
             extra.append(FRONTEND_VERSIONED_URL)
-        _LOGGER.info("Mercedes Trips: JS inyectado via KEY_EXTRA_JS_URL_ES5 → %s", FRONTEND_VERSIONED_URL)
+        _LOGGER.info("Mercedes Trips: card JS injected via KEY_EXTRA_JS_URL_ES5 → %s", FRONTEND_VERSIONED_URL)
         return True
     except (ImportError, Exception) as exc:
-        _LOGGER.debug("Mercedes Trips: KEY_EXTRA_JS_URL_ES5 no disponible (%s)", exc)
+        _LOGGER.debug("Mercedes Trips: KEY_EXTRA_JS_URL_ES5 not available (%s)", exc)
 
     _LOGGER.warning(
-        "Mercedes Trips: no se pudo inyectar el JS automáticamente. "
-        "Añade manualmente el recurso Lovelace: %s (JavaScript Module)",
+        "Mercedes Trips: could not inject the card JS automatically. "
+        "Add it as a dashboard resource by hand: %s (JavaScript module)",
         FRONTEND_VERSIONED_URL,
     )
     return False
@@ -173,10 +180,8 @@ async def _async_ensure_lovelace_resource(hass: HomeAssistant, add_new: bool = T
 
     add_new=False (add_extra_js_url already injected the script):
     actively remove ANY resource entry for this card, including one at the
-    current URL — registering both would make the browser load the same
-    <script type=module> twice per page view, a race HA's own service
-    worker has been seen to mishandle (intermittent "Error de
-    configuración" depending on cache state).
+    current URL — registering both would make the browser load the card
+    twice per page view.
     """
     def _is_our_url(url: str) -> bool:
         return url == FRONTEND_URL or url.startswith(FRONTEND_URL + "?")
@@ -189,16 +194,27 @@ async def _async_ensure_lovelace_resource(hass: HomeAssistant, add_new: bool = T
         return _is_our_url(url) and url != FRONTEND_VERSIONED_URL
 
     # ── Method 1: live collection API ─────────────────────────────────────────
+    # The same collection the Dashboards → Resources page edits. It lives
+    # at hass.data["lovelace"].resources (a dict key on HA before 2024.x).
+    # In YAML resource mode it can't be edited and there is nothing to do.
     try:
-        from homeassistant.components.lovelace import resources as lovelace_res  # noqa: PLC0415
-
-        collection = await lovelace_res.async_get_resource_collection(hass)
+        lovelace = hass.data.get("lovelace")
+        collection = getattr(lovelace, "resources", None)
+        if collection is None and isinstance(lovelace, dict):
+            collection = lovelace.get("resources")
+        if collection is None:
+            raise RuntimeError("lovelace resources not available")
+        if not hasattr(collection, "async_create_item"):
+            _LOGGER.debug("Mercedes Trips: dashboard resources are in YAML mode, leaving them alone")
+            return
+        if hasattr(collection, "async_get_info"):
+            await collection.async_get_info()  # loads storage-mode resources on first use
         items = list(collection.async_items())
 
         for item in items:
             if _is_stale(item["url"]):
                 await collection.async_delete_item(item["id"])
-                _LOGGER.info("Mercedes Trips: recurso Lovelace obsoleto eliminado (live) → %s", item["url"])
+                _LOGGER.info("Mercedes Trips: removed stale dashboard resource (live) → %s", item["url"])
 
         if not add_new:
             return
@@ -206,12 +222,12 @@ async def _async_ensure_lovelace_resource(hass: HomeAssistant, add_new: bool = T
         existing_urls = {item["url"] for item in collection.async_items()}
         if FRONTEND_VERSIONED_URL not in existing_urls:
             await collection.async_create_item({"res_type": "module", "url": FRONTEND_VERSIONED_URL})
-            _LOGGER.info("Mercedes Trips: recurso Lovelace registrado (live) → %s", FRONTEND_VERSIONED_URL)
+            _LOGGER.info("Mercedes Trips: registered dashboard resource (live) → %s", FRONTEND_VERSIONED_URL)
         else:
-            _LOGGER.debug("Mercedes Trips: recurso Lovelace ya registrado")
+            _LOGGER.debug("Mercedes Trips: dashboard resource already registered")
         return
     except Exception as exc:
-        _LOGGER.debug("Mercedes Trips: collection API falló (%s), usando storage directo", exc)
+        _LOGGER.debug("Mercedes Trips: resource collection API failed (%s), writing storage directly", exc)
 
     # ── Method 2: write directly to HA storage ────────────────────────────────
     try:
@@ -229,7 +245,7 @@ async def _async_ensure_lovelace_resource(hass: HomeAssistant, add_new: bool = T
             if removed:
                 data["items"] = kept
                 await store.async_save(data)
-                _LOGGER.info("Mercedes Trips: %d recurso(s) obsoleto(s) eliminado(s) de storage", removed)
+                _LOGGER.info("Mercedes Trips: removed %d stale dashboard resource(s) from storage", removed)
             return
 
         if not any(item.get("url") == FRONTEND_VERSIONED_URL for item in kept):
@@ -243,22 +259,22 @@ async def _async_ensure_lovelace_resource(hass: HomeAssistant, add_new: bool = T
             data["items"] = kept
             await store.async_save(data)
             _LOGGER.info(
-                "Mercedes Trips: recurso Lovelace escrito en storage → %s "
-                "(%d obsoleto(s) eliminado(s), activo tras el próximo reinicio)",
+                "Mercedes Trips: dashboard resource written to storage → %s "
+                "(%d stale removed, active after the next restart)",
                 FRONTEND_VERSIONED_URL,
                 removed,
             )
         elif removed:
             data["items"] = kept
             await store.async_save(data)
-            _LOGGER.info("Mercedes Trips: %d recurso(s) obsoleto(s) eliminado(s) de storage", removed)
+            _LOGGER.info("Mercedes Trips: removed %d stale dashboard resource(s) from storage", removed)
         else:
-            _LOGGER.debug("Mercedes Trips: recurso ya existe en storage")
+            _LOGGER.debug("Mercedes Trips: dashboard resource already in storage")
 
     except Exception as exc:
         _LOGGER.error(
-            "Mercedes Trips: no se pudo registrar el recurso Lovelace (%s). "
-            "Añádelo manualmente: Ajustes → Dashboards → Recursos → %s (JavaScript Module)",
+            "Mercedes Trips: could not register the dashboard resource (%s). "
+            "Add it by hand: Settings → Dashboards → Resources → %s (JavaScript module)",
             exc,
             FRONTEND_VERSIONED_URL,
         )
