@@ -4,22 +4,22 @@ Versions before v1.4.0 are summarised from their GitHub release titles; the rele
 
 ## v1.5.0 - 2026-10-06
 
-- Demo and README screenshots use public places in Madrid (03b0d76)
-- Require HA 2026.3; single config entry; drop the unused www/ copy (43b1d01)
-- Geocode through HA's aiohttp session; stop caching failed lookups (7445a14)
-- Stop loading Leaflet and fonts from CDNs; fix card requests after 30 min (6dde291)
-- Bump the actions group with 3 updates (#1) (73dab7c)
+- Demo and README screenshots use public places in Madrid (8877175)
+- Require HA 2026.3; single config entry; drop the unused www/ copy (8337f42)
+- Geocode through HA's aiohttp session; stop caching failed lookups (d0f748d)
+- Stop loading Leaflet and fonts from CDNs; fix card requests after 30 min (02d9df5)
+- Bump the actions group with 3 updates (#1) (f4ee5fa)
 
 ## v1.4.0 - 2026-10-06
 
-- Start trips on real odometer movement; fix a crash when a trip closes (e8647e2)
-- README: demo GIF, current screenshots, generic setup instructions (254e674)
-- Add brand icon, HACS/hassfest validation and a release workflow (8a46bad)
-- Fix "Configuration error" when the card's script beats HA's app bundle (b07debd)
-- Card UI in English and Spanish, following the HA user's language (6fe9a47)
-- Register the card and views in async_setup; fix the resources lookup (1fa1e1c)
-- Fix hour filter off by the UTC offset and trip detail returning 404 (c56b0da)
-- Make setup generic: detect the car's mbapi2020 entities, no EQB defaults (4ae87c6)
+- Start trips on real odometer movement; fix a crash when a trip closes (f62787b)
+- README: demo GIF, current screenshots, generic setup instructions (8d4f0f2)
+- Add brand icon, HACS/hassfest validation and a release workflow (c047152)
+- Fix "Configuration error" when the card's script beats HA's app bundle (3e2ffa9)
+- Card UI in English and Spanish, following the HA user's language (a01a976)
+- Register the card and views in async_setup; fix the resources lookup (f3d0b1f)
+- Fix hour filter off by the UTC offset and trip detail returning 404 (515494a)
+- Make setup generic: detect the car's mbapi2020 entities, no EQB defaults (4ecd63c)
 
 ## v1.3.0 - 2026-10-06
 
