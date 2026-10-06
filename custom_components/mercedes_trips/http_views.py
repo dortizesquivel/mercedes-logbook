@@ -5,6 +5,7 @@ import json
 from aiohttp import web
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.http import KEY_HASS
 
 from .const import DOMAIN
 from .coordinator import TripCoordinator
@@ -24,7 +25,7 @@ class TripsListView(HomeAssistantView):
     requires_auth = True
 
     async def get(self, request: web.Request) -> web.Response:
-        hass: HomeAssistant = request.app["hass"]
+        hass: HomeAssistant = request.app[KEY_HASS]
         coordinator = _get_coordinator(hass)
         if coordinator is None:
             return web.Response(status=503, text="Integration not loaded")
@@ -86,7 +87,7 @@ class TripTotalsView(HomeAssistantView):
     requires_auth = True
 
     async def get(self, request: web.Request) -> web.Response:
-        hass: HomeAssistant = request.app["hass"]
+        hass: HomeAssistant = request.app[KEY_HASS]
         coordinator = _get_coordinator(hass)
         if coordinator is None:
             return web.Response(status=503, text="Integration not loaded")
@@ -114,7 +115,7 @@ class TripDetailView(HomeAssistantView):
     requires_auth = True
 
     async def get(self, request: web.Request, trip_id: str) -> web.Response:
-        hass: HomeAssistant = request.app["hass"]
+        hass: HomeAssistant = request.app[KEY_HASS]
         coordinator = _get_coordinator(hass)
         if coordinator is None:
             return web.Response(status=503, text="Integration not loaded")

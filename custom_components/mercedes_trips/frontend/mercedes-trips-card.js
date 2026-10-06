@@ -5,12 +5,19 @@
  * following the Home Assistant user's language.
  */
 
-const LEAFLET_CSS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-const LEAFLET_JS  = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+// Leaflet and the display font ship with the integration (vendor/, next
+// to this file) instead of coming from a CDN at runtime: nothing third
+// party runs in the user's browser, and the card works offline. Leaflet's
+// CSS is not loaded at all — the rules the card needs are inlined below.
+const VENDOR_URL = new URL("vendor/", import.meta.url);
+const LEAFLET_JS = new URL("leaflet.js?v=1.9.4", VENDOR_URL).href;
 // Display face only (title + readout figures); everything else uses the
 // HA theme's own font so the card sits naturally on the dashboard.
-const BRAND_FONTS_CSS =
-  "https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&display=swap";
+const BRAND_FONT_FACES = [600, 700].map(weight => `
+  @font-face {
+    font-family: "Chakra Petch"; font-style: normal; font-weight: ${weight}; font-display: swap;
+    src: url("${new URL(`chakra-petch-${weight}.woff2`, VENDOR_URL).href}") format("woff2");
+  }`).join("");
 
 // Four colors, not ten — enough to tell recent trips apart on the map and
 // in the list without turning either into a rainbow.
@@ -94,23 +101,28 @@ const QUICK_FILTERS = ["today", "yesterday", "7d", "month", "lastMonth", "year"]
 function _quickLabel(key) { return _t(`filter.${key}`); }
 const DEFAULT_QUICK_FILTER = "7d";
 
+// One promise per URL, so a second card on the same dashboard waits for
+// the same load instead of resolving before the script has run.
+const _scriptLoads = new Map();
 function _loadScript(src) {
-  return new Promise((resolve, reject) => {
-    if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
-    const s = document.createElement("script");
-    s.src = src; s.onload = resolve; s.onerror = reject;
-    document.head.appendChild(s);
-  });
+  if (!_scriptLoads.has(src)) {
+    _scriptLoads.set(src, new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = src; s.onload = resolve; s.onerror = reject;
+      document.head.appendChild(s);
+    }));
+  }
+  return _scriptLoads.get(src);
 }
 
-function _loadStylesheet(href) {
-  return new Promise((resolve) => {
-    if (document.querySelector(`link[href="${href}"]`)) { resolve(); return; }
-    const l = document.createElement("link");
-    l.rel = "stylesheet"; l.href = href;
-    l.onload = resolve; l.onerror = resolve; // fonts are cosmetic — never block on them
-    document.head.appendChild(l);
-  });
+// @font-face has to live in the document: fonts declared inside a shadow
+// root are ignored. Cosmetic only — the theme font is the fallback.
+function _loadBrandFonts() {
+  if (document.getElementById("mercedes-trips-fonts")) return;
+  const style = document.createElement("style");
+  style.id = "mercedes-trips-fonts";
+  style.textContent = BRAND_FONT_FACES;
+  document.head.appendChild(style);
 }
 
 function _formatDate(iso) {
@@ -217,7 +229,6 @@ class MercedesTripsCard extends HTMLElement {
     this._selectedTrip = null;
     this._quickFilter = DEFAULT_QUICK_FILTER;
     this._filters = { startDate: "", endDate: "", hourStart: 0, hourEnd: 23 };
-    this._haToken = null;
     this._rendered = false;
     this._fetchSeq = 0;
   }
@@ -228,9 +239,6 @@ class MercedesTripsCard extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
-    if (!this._haToken) {
-      this._haToken = hass.auth?.data?.access_token || null;
-    }
     _applyLocale(hass);
     if (!this._rendered) {
       this._rendered = true;
@@ -256,7 +264,7 @@ class MercedesTripsCard extends HTMLElement {
     this._filters.endDate = _isoDate(range.end);
     this._syncFilterControls();
     // Then load Leaflet JS + brand fonts (fonts never block card init)
-    _loadStylesheet(BRAND_FONTS_CSS);
+    _loadBrandFonts();
     await _loadScript(LEAFLET_JS);
     // Other HA cards (e.g. vehicle-info-card) bundle their own Leaflet copy
     // and reassign window.L for their own use once they load. Snapshot our
@@ -271,10 +279,10 @@ class MercedesTripsCard extends HTMLElement {
   }
 
   _buildDOM() {
-    // The <link> for Leaflet CSS is placed INSIDE the shadow root so that
-    // all Leaflet tile/pane positioning rules apply within this shadow tree.
+    // Leaflet's positioning rules are inlined in this shadow root's <style>
+    // (the map lives in the shadow tree, where a document stylesheet can't
+    // reach it).
     this.shadowRoot.innerHTML = `
-      <link rel="stylesheet" href="${LEAFLET_CSS}">
       <style>
         :host {
           display: block;
@@ -856,10 +864,9 @@ class MercedesTripsCard extends HTMLElement {
 
     let trips = [], activeTrip = null;
     try {
-      const headers = this._haToken ? { Authorization: `Bearer ${this._haToken}` } : {};
-      const resp = await fetch(`/api/mercedes_trips/trips?${params}`, { headers });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const data = await resp.json();
+      // callApi, not fetch with a copied token: HA refreshes the access
+      // token every 30 minutes, and a copy taken at load time expires.
+      const data = await this._hass.callApi("GET", `mercedes_trips/trips?${params}`);
       trips = data.trips || [];
       activeTrip = data.active_trip || null;
     } catch (e) {
@@ -908,10 +915,7 @@ class MercedesTripsCard extends HTMLElement {
     if (hourEnd < 23)  params.set("hour_end", hourEnd);
 
     try {
-      const headers = this._haToken ? { Authorization: `Bearer ${this._haToken}` } : {};
-      const resp = await fetch(`/api/mercedes_trips/totals?${params}`, { headers });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const totals = await resp.json();
+      const totals = await this._hass.callApi("GET", `mercedes_trips/totals?${params}`);
       if (seq !== this._fetchSeq) return; // filter changed again while this was in flight
       this._prevTotals = totals;
       this._renderInstrument();
