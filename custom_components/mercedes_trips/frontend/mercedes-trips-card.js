@@ -579,9 +579,15 @@ class MercedesTripsCard extends HTMLElement {
       preferCanvas: true,
     }).setView([40.4, -3.7], 6);
 
-    this._L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    // OSM's tile servers answer requests without a Referer with a 403
+    // "Access blocked" tile. HA's frontend sets
+    // <meta name="referrer" content="same-origin">, so tiles inherit "send
+    // nothing cross-origin" — override it per tile so OSM gets our origin.
+    // Single host, not {s}. subdomains: OSM deprecated those.
+    this._L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: "© <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a>",
       maxZoom: 19,
+      referrerPolicy: "strict-origin-when-cross-origin",
     }).addTo(this._map);
 
     this._map.invalidateSize({ animate: false });
