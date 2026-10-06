@@ -12,6 +12,7 @@ from typing import Any
 
 import aiohttp
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.event import (
     async_track_state_change_event,
     async_track_time_interval,
@@ -396,13 +397,6 @@ class TripCoordinator:
         if cached is not None:
             return cached
 
-        def _do_request():
-            import urllib.request
-            url = f"{NOMINATIM_URL}?format=jsonv2&lat={lat}&lon={lon}&zoom=16&addressdetails=1"
-            req = urllib.request.Request(url, headers={"User-Agent": NOMINATIM_USER_AGENT})
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                return json.loads(resp.read().decode())
-
         # Start and end of a trip are geocoded back to back; keep them
         # inside Nominatim's one-request-per-second limit.
         wait = self._last_geocode_request + NOMINATIM_MIN_INTERVAL_SECONDS - time.monotonic()
@@ -411,21 +405,31 @@ class TripCoordinator:
         self._last_geocode_request = time.monotonic()
 
         try:
-            data = await self.hass.async_add_executor_job(_do_request)
-            addr = data.get("display_name", f"{lat:.4f},{lon:.4f}")
-            parts = data.get("address", {})
-            short = ", ".join(
-                filter(None, [
-                    parts.get("road") or parts.get("pedestrian") or parts.get("path"),
-                    parts.get("house_number"),
-                    parts.get("suburb") or parts.get("neighbourhood"),
-                    parts.get("city") or parts.get("town") or parts.get("village"),
-                ])
-            )
-            address = short if short else addr
-        except Exception as exc:
+            session = async_get_clientsession(self.hass)
+            async with session.get(
+                NOMINATIM_URL,
+                params={"format": "jsonv2", "lat": lat, "lon": lon, "zoom": 16, "addressdetails": 1},
+                headers={"User-Agent": NOMINATIM_USER_AGENT},
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as resp:
+                resp.raise_for_status()
+                data = await resp.json()
+        except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as exc:
+            # Not cached: a network blip mustn't pin this place to bare
+            # coordinates forever. The next trip here will try again.
             _LOGGER.warning("Mercedes Trips: geocoding failed for %s,%s: %s", lat, lon, exc)
-            address = f"{lat:.4f},{lon:.4f}"
+            return f"{lat:.4f},{lon:.4f}"
+
+        parts = data.get("address", {})
+        short = ", ".join(
+            filter(None, [
+                parts.get("road") or parts.get("pedestrian") or parts.get("path"),
+                parts.get("house_number"),
+                parts.get("suburb") or parts.get("neighbourhood"),
+                parts.get("city") or parts.get("town") or parts.get("village"),
+            ])
+        )
+        address = short or data.get("display_name") or f"{lat:.4f},{lon:.4f}"
 
         await self.hass.async_add_executor_job(self._save_cached_address, lat, lon, address)
         return address
