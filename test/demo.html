@@ -9,8 +9,9 @@
   <title>Mercedes Trips Card — Demo</title>
   <style>
     /* Stand-ins for the HA theme variables the card reads. Dark by
-       default; open with ?theme=light for the light theme and ?w=360 to
-       squeeze the card to a phone-width column. */
+       default; open with ?theme=light for the light theme, ?w=360 to
+       squeeze the card to a phone-width column and ?lang=en (or any
+       language tag) to switch the UI language. */
     body {
       --primary-color: #4c7bf4;
       --text-primary-color: #fff;
@@ -119,8 +120,12 @@
       if (url.startsWith("/api/mercedes_trips/trips")) {
         const p = new URL(url, location.origin).searchParams;
         const s = p.get("start_date"), e = p.get("end_date");
+        const hs = p.has("hour_start") ? Number(p.get("hour_start")) : 0;
+        const he = p.has("hour_end") ? Number(p.get("hour_end")) : 23;
         const local = iso => { const d = new Date(iso); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
-        const trips = MOCK_TRIPS.filter(t => (!s || local(t.start_time) >= s) && (!e || local(t.start_time) <= e));
+        const hour = iso => new Date(iso).getHours();
+        const trips = MOCK_TRIPS.filter(t => (!s || local(t.start_time) >= s) && (!e || local(t.start_time) <= e)
+          && hour(t.start_time) >= hs && hour(t.start_time) <= he);
         return new Promise(r => setTimeout(() => r({ ok: true, json: () => Promise.resolve({ trips, active_trip: null }) }), 250));
       }
       if (url.startsWith("/api/mercedes_trips/totals")) {
@@ -145,6 +150,8 @@
       auth: { data: { access_token: "demo-token" } },
       states: {},
       themes: { darkMode: DARK },
+      locale: { language: qs.get("lang") || "es", time_format: "language" },
+      config: { latitude: 36.17, longitude: -5.35 },
     };
     document.querySelector(".container").appendChild(card);
   </script>

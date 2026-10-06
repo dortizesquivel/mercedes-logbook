@@ -1,7 +1,8 @@
 /**
  * Mercedes Trips Card — Custom Lovelace card
- * Mapa multi-trayecto con Leaflet, filtros rápidos por periodo, stats
- * contextuales al filtro con comparativa vs. periodo anterior.
+ * Multi-trip Leaflet map, quick period filters, and stats for the selected
+ * period compared with the one right before it. UI in English or Spanish,
+ * following the Home Assistant user's language.
  */
 
 const LEAFLET_CSS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
@@ -19,17 +20,78 @@ const ROUTE_COLORS = ["#00c2b2", "#ffb020", "#9a8cf0", "#ff6b5e"];
 // 30s) don't stall the main thread when drawing/fitting the map.
 const MAX_TRIP_POINTS = 300;
 
-const QUICK_FILTERS = [
-  { key: "today",     label: "Hoy" },
-  { key: "yesterday", label: "Ayer" },
-  { key: "7d",        label: "7 días" },
-  { key: "month",     label: "Este mes" },
-  { key: "lastMonth", label: "Mes anterior" },
-  { key: "year",      label: "Este año" },
-];
-function _quickLabel(key) {
-  return (QUICK_FILTERS.find(f => f.key === key) || { label: "" }).label;
+// UI strings. English is the fallback for every language without its own
+// table; {name} placeholders are filled by _t().
+const STRINGS = {
+  en: {
+    title: "Trip logbook",
+    "filter.today": "Today", "filter.yesterday": "Yesterday", "filter.7d": "7 days",
+    "filter.month": "This month", "filter.lastMonth": "Last month", "filter.year": "This year",
+    "filter.custom": "Custom", "filter.group": "Period",
+    from: "From", to: "To", hours: "Hours", apply: "Apply", backTo: "Back to {label}",
+    driving: "Driving",
+    distance: "Distance", trips: "Trips", energy: "Energy", avgConsumption: "Avg. consumption",
+    newValue: "New",
+    vsPrevDay: "Compared with the previous day", vsPrevDays: "Compared with the previous {days} days",
+    allHistory: "All history", hourRange: ", {from}:00 to {to}:00",
+    today: "Today", yesterday: "Yesterday", unknownPlace: "Unknown location",
+    emptyTitle: "No trips in this period", emptyBody: "Try a wider period.", show: "Show {label}",
+    departure: "From", arrival: "To", duration: "Duration", consumption: "Consumption",
+    batteryUsed: "Battery used", odometer: "Odometer",
+    cardDescription: "Trip map with quick period filters and period-over-period stats",
+  },
+  es: {
+    title: "Cuaderno de ruta",
+    "filter.today": "Hoy", "filter.yesterday": "Ayer", "filter.7d": "7 días",
+    "filter.month": "Este mes", "filter.lastMonth": "Mes anterior", "filter.year": "Este año",
+    "filter.custom": "Personalizado", "filter.group": "Periodo",
+    from: "Desde", to: "Hasta", hours: "Horas", apply: "Aplicar", backTo: "Volver a {label}",
+    driving: "En ruta",
+    distance: "Distancia", trips: "Trayectos", energy: "Energía", avgConsumption: "Consumo medio",
+    newValue: "Nuevo",
+    vsPrevDay: "Comparado con el día anterior", vsPrevDays: "Comparado con los {days} días anteriores",
+    allHistory: "Todo el historial", hourRange: ", de {from}:00 a {to}:00",
+    today: "Hoy", yesterday: "Ayer", unknownPlace: "Ubicación desconocida",
+    emptyTitle: "No hay trayectos en estas fechas", emptyBody: "Prueba con un periodo más amplio.", show: "Ver {label}",
+    departure: "Salida", arrival: "Llegada", duration: "Duración", consumption: "Consumo",
+    batteryUsed: "Batería usada", odometer: "Odómetro",
+    cardDescription: "Mapa de trayectos con filtros rápidos y estadísticas comparativas",
+  },
+};
+
+// Set from hass.locale on every hass update (see _applyLocale). Module
+// level because the formatting helpers below are plain functions; every
+// card on a dashboard shares the same user and so the same language.
+let _locale = "en";
+let _strings = STRINGS.en;
+_setLanguage(document.documentElement.lang || navigator.language);
+let _hour12; // undefined → whatever the locale uses
+
+function _t(key, vars = {}) {
+  const s = _strings[key] ?? STRINGS.en[key] ?? key;
+  return s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? "");
 }
+
+function _setLanguage(lang) {
+  try {
+    // An unknown tag would make every toLocaleString() call throw.
+    _locale = Intl.DateTimeFormat.supportedLocalesOf(lang || "en")[0] || "en";
+  } catch (_) {
+    _locale = "en";
+  }
+  _strings = STRINGS[_locale.split("-")[0].toLowerCase()] || STRINGS.en;
+}
+
+// HA's own profile settings: language, plus the 12/24 h choice, which
+// can differ from what the language would default to.
+function _applyLocale(hass) {
+  _setLanguage(hass?.locale?.language || hass?.language || navigator.language);
+  const tf = hass?.locale?.time_format;
+  _hour12 = tf === "12" ? true : tf === "24" ? false : undefined;
+}
+
+const QUICK_FILTERS = ["today", "yesterday", "7d", "month", "lastMonth", "year"];
+function _quickLabel(key) { return _t(`filter.${key}`); }
 const DEFAULT_QUICK_FILTER = "7d";
 
 function _loadScript(src) {
@@ -54,11 +116,11 @@ function _loadStylesheet(href) {
 function _formatDate(iso) {
   if (!iso) return "—";
   const d = new Date(iso);
-  return d.toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return d.toLocaleDateString(_locale, { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 function _formatTime(iso) {
   if (!iso) return "—";
-  return new Date(iso).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+  return new Date(iso).toLocaleTimeString(_locale, { hour: "2-digit", minute: "2-digit", hour12: _hour12 });
 }
 function _formatDuration(start, end) {
   if (!start || !end) return "—";
@@ -67,13 +129,13 @@ function _formatDuration(start, end) {
 }
 function _fmtNum(v, decimals = 1) {
   if (v == null || Number.isNaN(v)) return "—";
-  return v.toLocaleString("es-ES", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  return v.toLocaleString(_locale, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 // Distances: whole km stay whole ("3 km", "319 km"), only real fractions
-// get a decimal ("35,2 km") — no "3,0" noise in every row.
+// get a decimal ("35.2 km") — no "3.0" noise in every row.
 function _fmtKm(v) {
   if (v == null || Number.isNaN(v)) return "—";
-  return v.toLocaleString("es-ES", { maximumFractionDigits: 1 });
+  return v.toLocaleString(_locale, { maximumFractionDigits: 1 });
 }
 function _esc(s) {
   return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -83,7 +145,7 @@ function _esc(s) {
 // the town is kept separately so it can be shown when it isn't the usual one.
 function _splitAddress(addr) {
   const parts = (addr || "").split(",").map(s => s.trim()).filter(Boolean);
-  if (!parts.length) return { street: "Ubicación desconocida", town: "" };
+  if (!parts.length) return { street: _t("unknownPlace"), town: "" };
   let street = parts[0];
   if (parts[1] && /^\d+\s*[a-zA-Z]?$/.test(parts[1])) street += ` ${parts[1]}`;
   return { street, town: parts.length > 1 ? parts[parts.length - 1] : "" };
@@ -92,18 +154,18 @@ function _capitalize(s) { return s ? s[0].toUpperCase() + s.slice(1) : s; }
 function _dayLabel(dayISO) {
   const now = new Date();
   const d = new Date(`${dayISO}T00:00:00`);
-  const date = d.toLocaleDateString("es-ES", {
+  const date = d.toLocaleDateString(_locale, {
     day: "numeric", month: "long", ...(d.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}),
   });
-  if (dayISO === _isoDate(now)) return `Hoy, ${date}`;
-  if (dayISO === _isoDate(_addDays(now, -1))) return `Ayer, ${date}`;
-  return `${_capitalize(d.toLocaleDateString("es-ES", { weekday: "long" }))}, ${date}`;
+  if (dayISO === _isoDate(now)) return `${_t("today")}, ${date}`;
+  if (dayISO === _isoDate(_addDays(now, -1))) return `${_t("yesterday")}, ${date}`;
+  return `${_capitalize(d.toLocaleDateString(_locale, { weekday: "long" }))}, ${date}`;
 }
 function _formatRange(startISO, endISO) {
   const s = new Date(`${startISO}T00:00:00`);
   const e = new Date(`${endISO}T00:00:00`);
   const thisYear = new Date().getFullYear();
-  const fmt = (d, withYear) => d.toLocaleDateString("es-ES", {
+  const fmt = (d, withYear) => d.toLocaleDateString(_locale, {
     day: "numeric", month: "short", ...(withYear ? { year: "numeric" } : {}),
   });
   if (startISO === endISO) return fmt(s, s.getFullYear() !== thisYear);
@@ -133,7 +195,7 @@ function _quickRange(key) {
 }
 
 // Same-length window immediately preceding [startISO, endISO] — used for
-// the "vs. periodo anterior" delta on any range, including custom ones.
+// the "vs. previous period" delta on any range, including custom ones.
 function _previousRange(startISO, endISO) {
   const start = new Date(`${startISO}T00:00:00`);
   const end = new Date(`${endISO}T00:00:00`);
@@ -169,6 +231,7 @@ class MercedesTripsCard extends HTMLElement {
     if (!this._haToken) {
       this._haToken = hass.auth?.data?.access_token || null;
     }
+    _applyLocale(hass);
     if (!this._rendered) {
       this._rendered = true;
       this._init();
@@ -540,30 +603,30 @@ class MercedesTripsCard extends HTMLElement {
       <div class="card">
         <div class="card-header">
           <h2 class="card-title" id="card-title"></h2>
-          <span id="active-badge" class="badge-live" style="display:none"><span class="dot"></span>En ruta</span>
+          <span id="active-badge" class="badge-live" style="display:none"><span class="dot"></span>${_t("driving")}</span>
         </div>
 
         <div class="instrument" id="instrument"></div>
 
         <div class="filter-block">
-          <div class="quick-filters" role="group" aria-label="Periodo">
-            ${QUICK_FILTERS.map(f => `<button class="chip" data-key="${f.key}">${f.label}</button>`).join("")}
-            <button class="chip chip-custom" id="chip-custom" aria-expanded="false">Personalizado <span class="caret">▾</span></button>
+          <div class="quick-filters" role="group" aria-label="${_t("filter.group")}">
+            ${QUICK_FILTERS.map(key => `<button class="chip" data-key="${key}">${_quickLabel(key)}</button>`).join("")}
+            <button class="chip chip-custom" id="chip-custom" aria-expanded="false">${_t("filter.custom")} <span class="caret">▾</span></button>
           </div>
           <div class="custom-range" id="custom-range" style="display:none">
-            <div class="field"><label for="f-start">Desde</label><input type="date" id="f-start"></div>
-            <div class="field"><label for="f-end">Hasta</label><input type="date" id="f-end"></div>
+            <div class="field"><label for="f-start">${_t("from")}</label><input type="date" id="f-start"></div>
+            <div class="field"><label for="f-end">${_t("to")}</label><input type="date" id="f-end"></div>
             <div class="field">
-              <label for="f-hour-start">Horas</label>
+              <label for="f-hour-start">${_t("hours")}</label>
               <select id="f-hour-start">${Array.from({length:24}, (_,h) => `<option value="${h}">${_pad2(h)}:00</option>`).join("")}</select>
               <span class="sep">–</span>
               <select id="f-hour-end">${Array.from({length:24}, (_,h) => `<option value="${h}"${h===23?" selected":""}>${_pad2(h)}:00</option>`).join("")}</select>
             </div>
-            <button class="btn btn-primary" id="btn-apply-custom">Aplicar</button>
+            <button class="btn btn-primary" id="btn-apply-custom">${_t("apply")}</button>
           </div>
           <div class="filter-summary">
             <span id="filter-summary-text"></span>
-            <button class="filter-clear" id="btn-clear-filter" hidden>Volver a ${_quickLabel(DEFAULT_QUICK_FILTER).toLowerCase()}</button>
+            <button class="filter-clear" id="btn-clear-filter" hidden>${_t("backTo", { label: _quickLabel(DEFAULT_QUICK_FILTER).toLowerCase() })}</button>
           </div>
         </div>
 
@@ -574,7 +637,7 @@ class MercedesTripsCard extends HTMLElement {
         <div class="trip-list" id="trip-list"></div>
       </div>
     `;
-    this.shadowRoot.getElementById("card-title").textContent = this._config.title || "Cuaderno de ruta";
+    this.shadowRoot.getElementById("card-title").textContent = this._config.title || _t("title");
     this._applyTheme();
 
     this.shadowRoot.querySelectorAll(".chip[data-key]").forEach(chip => {
@@ -627,10 +690,15 @@ class MercedesTripsCard extends HTMLElement {
       return;
     }
 
+    // Until there are trips to fit, show the area around the HA home
+    // location; the whole world if it isn't set.
+    const home = this._hass?.config;
+    const center = home && home.latitude != null && home.longitude != null
+      ? [[home.latitude, home.longitude], 11] : [[20, 0], 2];
     this._map = this._L.map(el, {
       zoomControl: true,
       preferCanvas: true,
-    }).setView([40.4, -3.7], 6);
+    }).setView(...center);
 
     // OSM's tile servers answer requests without a Referer with a 403
     // "Access blocked" tile. HA's frontend sets
@@ -869,7 +937,7 @@ class MercedesTripsCard extends HTMLElement {
     if (prev == null || curr == null) return `<span class="stat-delta neutral">&nbsp;</span>`;
     let text, isUp;
     if (percent) {
-      if (!prev) return `<span class="stat-delta neutral">Nuevo</span>`;
+      if (!prev) return `<span class="stat-delta neutral">${_t("newValue")}</span>`;
       const pct = ((curr - prev) / prev) * 100;
       isUp = pct >= 0;
       text = `${isUp ? "▲" : "▼"} ${Math.abs(pct).toFixed(0)} %`;
@@ -886,7 +954,7 @@ class MercedesTripsCard extends HTMLElement {
     const { startDate, endDate } = this._filters;
     if (!startDate || !endDate) return "";
     const days = Math.round((new Date(`${endDate}T00:00:00`) - new Date(`${startDate}T00:00:00`)) / 86400000) + 1;
-    return days === 1 ? "Comparado con el día anterior" : `Comparado con los ${days} días anteriores`;
+    return days === 1 ? _t("vsPrevDay") : _t("vsPrevDays", { days });
   }
 
   _renderSkeleton() {
@@ -923,22 +991,22 @@ class MercedesTripsCard extends HTMLElement {
     el.innerHTML = `
       <div class="stat">
         <div class="stat-value">${_fmtKm(cur.distance)}<span class="unit">km</span></div>
-        <div class="stat-label">Distancia</div>
+        <div class="stat-label">${_t("distance")}</div>
         ${this._deltaBadge(cur.distance, prev ? prev.distance_km : null)}
       </div>
       <div class="stat">
         <div class="stat-value">${cur.count}</div>
-        <div class="stat-label">Trayectos</div>
+        <div class="stat-label">${_t("trips")}</div>
         ${this._deltaBadge(cur.count, prev ? prev.trip_count : null, { percent: false })}
       </div>
       <div class="stat">
         <div class="stat-value">${_fmtNum(cur.kwh, 1)}<span class="unit">kWh</span></div>
-        <div class="stat-label">Energía</div>
+        <div class="stat-label">${_t("energy")}</div>
         ${this._deltaBadge(cur.kwh, prev ? prev.kwh_used : null)}
       </div>
       <div class="stat">
         <div class="stat-value">${cur.avg != null ? _fmtNum(cur.avg, 1) : "—"}<span class="unit">kWh/100 km</span></div>
-        <div class="stat-label">Consumo medio</div>
+        <div class="stat-label">${_t("avgConsumption")}</div>
         ${cur.avg != null ? this._deltaBadge(cur.avg, prevAvg, { judged: true }) : `<span class="stat-delta neutral">&nbsp;</span>`}
       </div>
       <div class="instrument-caption">${this._comparisonCaption()}</div>
@@ -950,8 +1018,8 @@ class MercedesTripsCard extends HTMLElement {
     const el = this.shadowRoot.getElementById("filter-summary-text");
     if (!el) return;
     const { startDate, endDate, hourStart, hourEnd } = this._filters;
-    let text = startDate && endDate ? _formatRange(startDate, endDate) : "Todo el historial";
-    if (hourStart > 0 || hourEnd < 23) text += `, de ${_pad2(hourStart)}:00 a ${_pad2(hourEnd)}:00`;
+    let text = startDate && endDate ? _formatRange(startDate, endDate) : _t("allHistory");
+    if (hourStart > 0 || hourEnd < 23) text += _t("hourRange", { from: _pad2(hourStart), to: _pad2(hourEnd) });
     el.textContent = text;
   }
 
@@ -1068,9 +1136,9 @@ class MercedesTripsCard extends HTMLElement {
       list.classList.remove("has-selection");
       list.innerHTML = `
         <div class="empty-state">
-          <p class="empty-title">No hay trayectos en estas fechas</p>
-          <p class="empty-body">Prueba con un periodo más amplio.</p>
-          <button class="btn btn-primary" id="empty-cta">Ver ${_quickLabel(next).toLowerCase()}</button>
+          <p class="empty-title">${_t("emptyTitle")}</p>
+          <p class="empty-body">${_t("emptyBody")}</p>
+          <button class="btn btn-primary" id="empty-cta">${_t("show", { label: _quickLabel(next).toLowerCase() })}</button>
         </div>`;
       const cta = this.shadowRoot.getElementById("empty-cta");
       if (cta) cta.addEventListener("click", () => this._setQuickFilter(next));
@@ -1135,14 +1203,14 @@ class MercedesTripsCard extends HTMLElement {
     return `
       <div class="trip-detail">
         <p class="where">
-          Salida: <span>${_esc(trip.start_address || "Ubicación desconocida")}</span><br>
-          Llegada: <span>${_esc(trip.end_address || "Ubicación desconocida")}</span>
+          ${_t("departure")}: <span>${_esc(trip.start_address || _t("unknownPlace"))}</span><br>
+          ${_t("arrival")}: <span>${_esc(trip.end_address || _t("unknownPlace"))}</span>
         </p>
         <dl>
-          <div><dt>Duración</dt><dd>${_formatDuration(trip.start_time, trip.end_time)}</dd></div>
-          <div><dt>Consumo</dt><dd>${avg}</dd></div>
-          <div><dt>Batería usada</dt><dd>${soc}</dd></div>
-          <div><dt>Odómetro</dt><dd>${odo}</dd></div>
+          <div><dt>${_t("duration")}</dt><dd>${_formatDuration(trip.start_time, trip.end_time)}</dd></div>
+          <div><dt>${_t("consumption")}</dt><dd>${avg}</dd></div>
+          <div><dt>${_t("batteryUsed")}</dt><dd>${soc}</dd></div>
+          <div><dt>${_t("odometer")}</dt><dd>${odo}</dd></div>
         </dl>
       </div>`;
   }
@@ -1209,7 +1277,7 @@ if (!window.customCards.some(c => c.type === "mercedes-trips-card")) {
   window.customCards.push({
     type: "mercedes-trips-card",
     name: "Mercedes Trips",
-    description: "Mapa de trayectos con filtros rápidos y estadísticas comparativas para Mercedes EQB",
+    description: _t("cardDescription"),
     preview: false,
   });
 }
