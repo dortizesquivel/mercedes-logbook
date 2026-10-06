@@ -1260,17 +1260,24 @@ class MercedesTripsCard extends HTMLElement {
   getCardSize() { return 8; }
 }
 
-// HA can load this script through more than one path at once — the
-// add_extra_js_url injection AND the registered Lovelace resource both
-// point at the same URL. HA normally isolates that with a scoped custom
-// element registry, but when that polyfill isn't available the second
-// execution's define() throws "already been used with this registry" and
-// aborts before window.customCards.push() below ever runs, which is why
-// the card can silently fail to mount even though the first load
-// registered it fine. Guard it so a duplicate load is a harmless no-op.
-if (!customElements.get("mercedes-trips-card")) {
-  customElements.define("mercedes-trips-card", MercedesTripsCard);
+// Guarded so a second load of this script (it can arrive through more
+// than one path) is a harmless no-op instead of a define() that throws.
+function _registerCard() {
+  if (!customElements.get("mercedes-trips-card")) {
+    customElements.define("mercedes-trips-card", MercedesTripsCard);
+  }
 }
+_registerCard();
+// HA's app bundle installs a scoped custom-element registry polyfill that
+// REPLACES window.customElements. index.html imports this script in
+// parallel with that bundle, and when this one wins the race (a fast
+// server, or the service worker's cache) the definition above lands in
+// the old registry: HA's get() can't see it and the card shows
+// "Configuration error" until a reload that happens to lose the race.
+// Register again on whatever registry is current once HA's root element
+// exists — by then the polyfill, if any, is in place. The polyfill reuses
+// the class already defined natively for the tag, so this is safe.
+window.customElements.whenDefined("home-assistant").then(_registerCard);
 
 window.customCards = window.customCards || [];
 if (!window.customCards.some(c => c.type === "mercedes-trips-card")) {
