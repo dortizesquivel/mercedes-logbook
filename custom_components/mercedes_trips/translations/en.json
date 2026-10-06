@@ -1,0 +1,92 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Mercedes Trips",
+        "description": "Logs every trip of your Mercedes from the Mercedes me (mbapi2020) entities. If that integration is set up, its entities are already selected below.",
+        "data": {
+          "odometer_entity": "Odometer sensor",
+          "tracker_entity": "GPS tracker",
+          "soc_entity": "Battery level sensor (SoC %)",
+          "range_entity": "Electric range sensor",
+          "battery_capacity_kwh": "Usable battery capacity",
+          "inactivity_timeout_min": "Inactivity timeout",
+          "min_trip_distance_km": "Minimum trip distance"
+        },
+        "data_description": {
+          "odometer_entity": "The car's odometer, e.g. `sensor.…_odometer` from Mercedes me (mbapi2020). Trips start and end on its changes.",
+          "tracker_entity": "The car's device_tracker, used for the route and the start/end addresses.",
+          "soc_entity": "State of charge in %, used to work out the energy each trip used.",
+          "range_entity": "Optional.",
+          "battery_capacity_kwh": "Usable (net) capacity of your car's battery. See the table in the README if you don't know it.",
+          "inactivity_timeout_min": "A trip ends after this many minutes without the odometer changing.",
+          "min_trip_distance_km": "Shorter trips are discarded as GPS/odometer noise."
+        }
+      }
+    },
+    "error": {
+      "entity_not_found": "Entity not found in Home Assistant"
+    },
+    "abort": {
+      "already_configured": "Mercedes Trips is already set up"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Mercedes Trips",
+        "description": "Changes apply right away; trips already logged keep their values.",
+        "data": {
+          "odometer_entity": "Odometer sensor",
+          "tracker_entity": "GPS tracker",
+          "soc_entity": "Battery level sensor (SoC %)",
+          "range_entity": "Electric range sensor",
+          "battery_capacity_kwh": "Usable battery capacity",
+          "inactivity_timeout_min": "Inactivity timeout",
+          "min_trip_distance_km": "Minimum trip distance"
+        },
+        "data_description": {
+          "odometer_entity": "The car's odometer, e.g. `sensor.…_odometer` from Mercedes me (mbapi2020). Trips start and end on its changes.",
+          "tracker_entity": "The car's device_tracker, used for the route and the start/end addresses.",
+          "soc_entity": "State of charge in %, used to work out the energy each trip used.",
+          "range_entity": "Optional.",
+          "battery_capacity_kwh": "Usable (net) capacity of your car's battery. See the table in the README if you don't know it.",
+          "inactivity_timeout_min": "A trip ends after this many minutes without the odometer changing.",
+          "min_trip_distance_km": "Shorter trips are discarded as GPS/odometer noise."
+        }
+      }
+    },
+    "error": {
+      "entity_not_found": "Entity not found in Home Assistant"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "distance_month": {
+        "name": "Distance this month"
+      },
+      "distance_year": {
+        "name": "Distance this year"
+      },
+      "kwh_month": {
+        "name": "Energy used this month"
+      },
+      "avg_consumption": {
+        "name": "Average consumption this month"
+      },
+      "total_trips": {
+        "name": "Total trips"
+      },
+      "last_trip": {
+        "name": "Last trip"
+      },
+      "active_trip": {
+        "name": "Trip in progress",
+        "state": {
+          "active": "Driving",
+          "idle": "Parked"
+        }
+      }
+    }
+  }
+}
