@@ -6,6 +6,7 @@ import logging
 import math
 import os
 import sqlite3
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -28,6 +29,7 @@ from .const import (
     DB_FILENAME,
     GEOCODE_PRECISION,
     INACTIVITY_CHECK_INTERVAL_SECONDS,
+    NOMINATIM_MIN_INTERVAL_SECONDS,
     NOMINATIM_URL,
     NOMINATIM_USER_AGENT,
     STORAGE_KEY,
@@ -36,6 +38,14 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+# start_time is stored as local ISO time with its UTC offset
+# ("2026-10-06T09:57:00+02:00"). SQLite's strftime() would convert that to
+# UTC first and shift the hour filter by the offset, so read the local
+# hour straight from the string.
+_LOCAL_HOUR_SQL = "CAST(substr(start_time, 12, 2) AS INTEGER)"
+
+_KM_PER_MILE = 1.609344
 
 
 def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -53,6 +63,17 @@ def _safe_float(value: Any, default: float | None = None) -> float | None:
         return f if math.isfinite(f) else default
     except (TypeError, ValueError):
         return default
+
+
+def _odometer_km(state) -> float | None:
+    """Odometer reading in km. Trips are always stored in km, so a car
+    whose Mercedes me account reports miles is converted on the way in."""
+    if state is None or state.state in ("unknown", "unavailable"):
+        return None
+    value = _safe_float(state.state)
+    if value is not None and state.attributes.get("unit_of_measurement") == "mi":
+        value *= _KM_PER_MILE
+    return value
 
 
 class TripCoordinator:
@@ -73,6 +94,7 @@ class TripCoordinator:
             "total_trips": 0,
         }
         self._last_trip_cache: dict | None = None
+        self._last_geocode_request = 0.0
 
     # ── Setup / teardown ──────────────────────────────────────────────────────
 
@@ -126,7 +148,8 @@ class TripCoordinator:
 
     def _notify_sensors(self) -> None:
         for sensor in self._sensors:
-            sensor.async_write_ha_state()
+            if sensor.hass is not None:  # not added yet right after setup
+                sensor.async_write_ha_state()
 
     # ── Database ──────────────────────────────────────────────────────────────
 
@@ -227,10 +250,10 @@ class TripCoordinator:
                 where_clauses.append("start_time <= ?")
                 params.append(end_date + "T23:59:59")
             if hour_start is not None:
-                where_clauses.append("CAST(strftime('%H', start_time) AS INTEGER) >= ?")
+                where_clauses.append(f"{_LOCAL_HOUR_SQL} >= ?")
                 params.append(hour_start)
             if hour_end is not None:
-                where_clauses.append("CAST(strftime('%H', start_time) AS INTEGER) <= ?")
+                where_clauses.append(f"{_LOCAL_HOUR_SQL} <= ?")
                 params.append(hour_end)
 
             where = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
@@ -240,6 +263,15 @@ class TripCoordinator:
                 params,
             ).fetchall()
             return [dict(r) for r in rows]
+        finally:
+            conn.close()
+
+    def get_trip(self, trip_id: int) -> dict | None:
+        conn = sqlite3.connect(self._db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            row = conn.execute("SELECT * FROM trips WHERE id = ?", (trip_id,)).fetchone()
+            return dict(row) if row else None
         finally:
             conn.close()
 
@@ -267,10 +299,10 @@ class TripCoordinator:
                 where_clauses.append("start_time <= ?")
                 params.append(end_date + "T23:59:59")
             if hour_start is not None:
-                where_clauses.append("CAST(strftime('%H', start_time) AS INTEGER) >= ?")
+                where_clauses.append(f"{_LOCAL_HOUR_SQL} >= ?")
                 params.append(hour_start)
             if hour_end is not None:
-                where_clauses.append("CAST(strftime('%H', start_time) AS INTEGER) <= ?")
+                where_clauses.append(f"{_LOCAL_HOUR_SQL} <= ?")
                 params.append(hour_end)
 
             where = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
@@ -365,6 +397,13 @@ class TripCoordinator:
             with urllib.request.urlopen(req, timeout=10) as resp:
                 return json.loads(resp.read().decode())
 
+        # Start and end of a trip are geocoded back to back; keep them
+        # inside Nominatim's one-request-per-second limit.
+        wait = self._last_geocode_request + NOMINATIM_MIN_INTERVAL_SECONDS - time.monotonic()
+        if wait > 0:
+            await asyncio.sleep(wait)
+        self._last_geocode_request = time.monotonic()
+
         try:
             data = await self.hass.async_add_executor_job(_do_request)
             addr = data.get("display_name", f"{lat:.4f},{lon:.4f}")
@@ -388,10 +427,7 @@ class TripCoordinator:
     # ── Entity state helpers ──────────────────────────────────────────────────
 
     def _get_odometer(self) -> float | None:
-        state = self.hass.states.get(self._config[CONF_ODOMETER_ENTITY])
-        if state is None or state.state in ("unknown", "unavailable"):
-            return None
-        return _safe_float(state.state)
+        return _odometer_km(self.hass.states.get(self._config[CONF_ODOMETER_ENTITY]))
 
     def _get_soc(self) -> float | None:
         state = self.hass.states.get(self._config[CONF_SOC_ENTITY])
@@ -433,10 +469,7 @@ class TripCoordinator:
 
     @callback
     def _handle_odometer_change(self, event) -> None:
-        new_state = event.data.get("new_state")
-        if new_state is None or new_state.state in ("unknown", "unavailable"):
-            return
-        new_odo = _safe_float(new_state.state)
+        new_odo = _odometer_km(event.data.get("new_state"))
         if new_odo is None:
             return
 
@@ -478,6 +511,8 @@ class TripCoordinator:
             "waypoints": first_waypoint,
         }
         await self._store.async_save(self._active_trip)
+        # "Trip in progress" goes active now, not only once the trip ends.
+        self._notify_sensors()
         _LOGGER.info(
             "Mercedes Trips: trip started — odo=%.1f km, SoC=%s%%",
             odometer,
@@ -571,15 +606,16 @@ class TripCoordinator:
             )
             self._active_trip = None
             await self._store.async_save(None)
+            self._notify_sensors()
             return
 
         start_soc = trip.get("start_soc")
         soc_used = None
         kwh_used = None
         avg_kwh = None
-        battery_kwh = self._config.get(CONF_BATTERY_CAPACITY, 66.5)
+        battery_kwh = _safe_float(self._config.get(CONF_BATTERY_CAPACITY))
 
-        if start_soc is not None and end_soc is not None:
+        if start_soc is not None and end_soc is not None and battery_kwh:
             soc_used = round(start_soc - end_soc, 1)
             if soc_used > 0:
                 kwh_used = round(soc_used / 100 * battery_kwh, 2)
