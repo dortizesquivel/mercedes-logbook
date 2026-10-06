@@ -1,0 +1,104 @@
+name: Release
+
+# Run it from Actions → Release → Run workflow, or:
+#   gh workflow run release.yml -f bump=patch        (patch | minor | major)
+# It checks the code, bumps the version in manifest.json, updates
+# CHANGELOG.md, commits, tags and publishes a GitHub release. HACS offers
+# the new release to every install as soon as it is published.
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version bump
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+      prerelease:
+        description: Pre-release (HACS only offers it with beta versions enabled)
+        type: boolean
+        default: false
+      dry_run:
+        description: Dry run (show the version and notes, publish nothing)
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    env:
+      BUMP: ${{ inputs.bump }}
+      PRERELEASE: ${{ inputs.prerelease }}
+      DRY_RUN: ${{ inputs.dry_run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Checks
+        run: |
+          python -m compileall -q custom_components
+          node --check custom_components/mercedes_trips/frontend/mercedes-trips-card.js
+          cmp custom_components/mercedes_trips/frontend/mercedes-trips-card.js www/mercedes-trips-card.js
+          python scripts/check_translations.py
+
+      - name: Bump version
+        id: version
+        run: echo "tag=$(python scripts/release.py bump "$BUMP")" >> "$GITHUB_OUTPUT"
+
+      - name: Release notes and changelog
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            python scripts/release.py notes "$TAG" --dry-run
+          else
+            python scripts/release.py notes "$TAG"
+          fi
+
+      - name: Commit and tag
+        if: inputs.dry_run == false
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add custom_components/mercedes_trips/manifest.json CHANGELOG.md
+          git commit -m "chore(release): $TAG"
+          git tag -a "$TAG" -m "$TAG"
+          git push origin HEAD:main "$TAG"
+
+      - name: Publish GitHub release
+        if: inputs.dry_run == false
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          flags=()
+          [ "$PRERELEASE" = "true" ] && flags+=(--prerelease)
+          gh release create "$TAG" --verify-tag --title "$TAG" \
+            --notes-file release-notes.md "${flags[@]}"
+
+      - name: Summary
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "Dry run for **$TAG**: nothing was committed or published." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Published [$TAG](https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG)." >> "$GITHUB_STEP_SUMMARY"
+          fi
