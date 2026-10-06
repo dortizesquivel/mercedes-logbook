@@ -6,8 +6,10 @@
 
 const LEAFLET_CSS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
 const LEAFLET_JS  = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+// Display face only (title + readout figures); everything else uses the
+// HA theme's own font so the card sits naturally on the dashboard.
 const BRAND_FONTS_CSS =
-  "https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=JetBrains+Mono:wght@500;700&display=swap";
+  "https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&display=swap";
 
 // Four colors, not ten — enough to tell recent trips apart on the map and
 // in the list without turning either into a rainbow.
@@ -17,17 +19,17 @@ const ROUTE_COLORS = ["#00c2b2", "#ffb020", "#9a8cf0", "#ff6b5e"];
 // 30s) don't stall the main thread when drawing/fitting the map.
 const MAX_TRIP_POINTS = 300;
 
-// deltaLabel stays short on purpose — it sits inside a narrow instrument
-// cell next to the delta value, and the period it's "vs." is already
-// named by the stat-label right above it.
 const QUICK_FILTERS = [
-  { key: "today",     label: "Hoy",          deltaLabel: "vs. ayer" },
-  { key: "yesterday", label: "Ayer",         deltaLabel: "vs. anterior" },
-  { key: "7d",        label: "7 días",       deltaLabel: "vs. anterior" },
-  { key: "month",     label: "Este mes",     deltaLabel: "vs. anterior" },
-  { key: "lastMonth", label: "Mes anterior", deltaLabel: "vs. anterior" },
-  { key: "year",      label: "Este año",     deltaLabel: "vs. anterior" },
+  { key: "today",     label: "Hoy" },
+  { key: "yesterday", label: "Ayer" },
+  { key: "7d",        label: "7 días" },
+  { key: "month",     label: "Este mes" },
+  { key: "lastMonth", label: "Mes anterior" },
+  { key: "year",      label: "Este año" },
 ];
+function _quickLabel(key) {
+  return (QUICK_FILTERS.find(f => f.key === key) || { label: "" }).label;
+}
 const DEFAULT_QUICK_FILTER = "7d";
 
 function _loadScript(src) {
@@ -54,12 +56,6 @@ function _formatDate(iso) {
   const d = new Date(iso);
   return d.toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
-function _formatDateOnly(isoDate) {
-  // For bare "YYYY-MM-DD" strings — force local-time parsing so the date
-  // doesn't shift a day in negative UTC-offset zones.
-  if (!isoDate) return "—";
-  return _formatDate(`${isoDate}T00:00:00`);
-}
 function _formatTime(iso) {
   if (!iso) return "—";
   return new Date(iso).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
@@ -72,6 +68,47 @@ function _formatDuration(start, end) {
 function _fmtNum(v, decimals = 1) {
   if (v == null || Number.isNaN(v)) return "—";
   return v.toLocaleString("es-ES", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+// Distances: whole km stay whole ("3 km", "319 km"), only real fractions
+// get a decimal ("35,2 km") — no "3,0" noise in every row.
+function _fmtKm(v) {
+  if (v == null || Number.isNaN(v)) return "—";
+  return v.toLocaleString("es-ES", { maximumFractionDigits: 1 });
+}
+function _esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+// Addresses are stored as "road, [number,] [suburb,] town" (see the
+// coordinator's reverse geocoding). The list only has room for the street;
+// the town is kept separately so it can be shown when it isn't the usual one.
+function _splitAddress(addr) {
+  const parts = (addr || "").split(",").map(s => s.trim()).filter(Boolean);
+  if (!parts.length) return { street: "Ubicación desconocida", town: "" };
+  let street = parts[0];
+  if (parts[1] && /^\d+\s*[a-zA-Z]?$/.test(parts[1])) street += ` ${parts[1]}`;
+  return { street, town: parts.length > 1 ? parts[parts.length - 1] : "" };
+}
+function _capitalize(s) { return s ? s[0].toUpperCase() + s.slice(1) : s; }
+function _dayLabel(dayISO) {
+  const now = new Date();
+  const d = new Date(`${dayISO}T00:00:00`);
+  const date = d.toLocaleDateString("es-ES", {
+    day: "numeric", month: "long", ...(d.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}),
+  });
+  if (dayISO === _isoDate(now)) return `Hoy, ${date}`;
+  if (dayISO === _isoDate(_addDays(now, -1))) return `Ayer, ${date}`;
+  return `${_capitalize(d.toLocaleDateString("es-ES", { weekday: "long" }))}, ${date}`;
+}
+function _formatRange(startISO, endISO) {
+  const s = new Date(`${startISO}T00:00:00`);
+  const e = new Date(`${endISO}T00:00:00`);
+  const thisYear = new Date().getFullYear();
+  const fmt = (d, withYear) => d.toLocaleDateString("es-ES", {
+    day: "numeric", month: "short", ...(withYear ? { year: "numeric" } : {}),
+  });
+  if (startISO === endISO) return fmt(s, s.getFullYear() !== thisYear);
+  const crossYear = s.getFullYear() !== e.getFullYear();
+  return `${fmt(s, crossYear)} – ${fmt(e, crossYear || e.getFullYear() !== thisYear)}`;
 }
 function _pad2(n) { return String(n).padStart(2, "0"); }
 function _isoDate(d) { return `${d.getFullYear()}-${_pad2(d.getMonth() + 1)}-${_pad2(d.getDate())}`; }
@@ -113,7 +150,6 @@ class MercedesTripsCard extends HTMLElement {
     this._trips = [];
     this._activeTrip = null;
     this._prevTotals = null;
-    this._prevLabel = "vs. periodo anterior";
     this._map = null;
     this._mapLayers = [];
     this._selectedTrip = null;
@@ -137,6 +173,14 @@ class MercedesTripsCard extends HTMLElement {
       this._rendered = true;
       this._init();
     }
+    this._applyTheme();
+  }
+
+  // Cheap enough to run on every hass update: follows HA's light/dark
+  // switch live without a re-render.
+  _applyTheme() {
+    const card = this.shadowRoot.querySelector(".card");
+    if (card) card.classList.toggle("dark", !!this._hass?.themes?.darkMode);
   }
 
   async _init() {
@@ -181,7 +225,6 @@ class MercedesTripsCard extends HTMLElement {
           --good: var(--success-color, #4caf50);
           --bad: var(--error-color, #db4437);
           --font-display: 'Chakra Petch', var(--primary-font-family, sans-serif);
-          --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
         }
         .card {
           background: var(--card-background-color, #1c1c1e);
@@ -200,24 +243,18 @@ class MercedesTripsCard extends HTMLElement {
 
         /* ── Header ──────────────────────────────────────────────────── */
         .card-header {
-          display: flex; align-items: flex-start; justify-content: space-between;
+          display: flex; align-items: center; justify-content: space-between;
           gap: 12px; padding: 18px 20px 14px;
         }
-        .eyebrow {
-          font-family: var(--font-mono); font-size: 0.66rem; font-weight: 500;
-          letter-spacing: .14em; text-transform: uppercase; color: var(--accent);
-          display: block; margin-bottom: 4px;
-        }
         .card-title {
-          font-family: var(--font-display); font-weight: 700; font-size: 1.25rem;
-          margin: 0; text-wrap: balance;
+          font-family: var(--font-display); font-weight: 700; font-size: 1.3rem;
+          letter-spacing: .01em; margin: 0; text-wrap: balance;
         }
         .badge-live {
           display: inline-flex; align-items: center; gap: 6px;
-          font-family: var(--font-mono); font-size: 0.64rem; font-weight: 700;
-          letter-spacing: .07em; text-transform: uppercase;
+          font-size: 0.75rem; font-weight: 600;
           color: var(--accent-on); background: var(--accent);
-          padding: 5px 10px 5px 8px; border-radius: 100px; white-space: nowrap;
+          padding: 4px 10px 4px 8px; border-radius: 100px; white-space: nowrap;
         }
         .badge-live .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-on); animation: mt-pulse 1.8s ease-in-out infinite; }
         @keyframes mt-pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
@@ -227,44 +264,53 @@ class MercedesTripsCard extends HTMLElement {
            surface, so it reads as a distinct "readout" panel in any
            theme (light or dark) instead of forcing one look. */
         .instrument {
-          margin: 0 20px 18px;
+          margin: 0 20px 16px;
           background: color-mix(in srgb, var(--accent) 10%, var(--card-background-color, #1c1c1e));
           border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
-          border-radius: 12px; padding: 14px 4px;
+          border-radius: 12px; padding: 14px 4px 12px;
           display: grid; grid-template-columns: repeat(4, 1fr);
         }
         .instrument .stat {
           padding: 0 12px; border-left: 1px solid var(--divider-color, rgba(127,127,127,.2));
-          display: flex; flex-direction: column; gap: 4px;
+          display: flex; flex-direction: column; gap: 2px;
           /* Grid items default to min-width:auto, which refuses to shrink
              below the content's natural (unwrapped) width — that's what
              was pushing the delta text past the panel's rounded corners
              when the card renders narrower than the text needs. */
           min-width: 0;
         }
-        .instrument .stat:first-child { padding-left: 4px; }
-        .instrument .stat:last-child { padding-right: 4px; }
-        .instrument .stat:first-child { border-left: none; }
+        .instrument .stat:first-child { padding-left: 4px; border-left: none; }
+        .instrument .stat:nth-child(4) { padding-right: 4px; }
         .stat-value {
-          font-family: var(--font-mono); font-variant-numeric: tabular-nums;
-          font-weight: 700; font-size: clamp(0.95rem, 2.4vw, 1.3rem);
-          color: var(--primary-text-color, #fff); letter-spacing: -.01em;
+          font-family: var(--font-display); font-variant-numeric: tabular-nums;
+          font-weight: 700; font-size: clamp(1.05rem, 2.6vw, 1.4rem); line-height: 1.15;
+          color: var(--primary-text-color, #fff);
           white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
-        .stat-value .unit { font-size: 0.62em; font-weight: 500; color: var(--accent); margin-left: 3px; }
-        .stat-label { font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: .08em; text-transform: uppercase; color: var(--secondary-text-color, #aaa); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .stat-delta { display: flex; flex-wrap: wrap; align-items: center; gap: 0 3px; font-family: var(--font-mono); font-size: 0.62rem; font-weight: 700; margin-top: 1px; min-height: 1em; line-height: 1.3; }
+        .stat-value .unit { font-family: var(--primary-font-family, sans-serif); font-size: 0.56em; font-weight: 500; color: var(--accent); margin-left: 3px; }
+        .stat-label { font-size: 0.75rem; color: var(--secondary-text-color, #aaa); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .stat-delta { font-size: 0.72rem; font-weight: 600; font-variant-numeric: tabular-nums; min-height: 1.3em; line-height: 1.3; white-space: nowrap; }
         .stat-delta.neutral { color: var(--secondary-text-color, #aaa); }
         .stat-delta.good { color: var(--good); }
         .stat-delta.bad { color: var(--bad); }
-        .stat-delta .vs { color: var(--secondary-text-color, #aaa); opacity: .8; font-weight: 500; text-transform: none; letter-spacing: 0; }
-        .instrument.is-loading .stat-value, .instrument.is-loading .stat-label, .instrument.is-loading .stat-delta { visibility: hidden; }
+        /* One line naming what every delta above is compared against,
+           instead of repeating "vs. anterior" under each figure. */
+        .instrument-caption { grid-column: 1 / -1; margin: 10px 4px 0; font-size: 0.72rem; color: var(--secondary-text-color, #aaa); }
+        .instrument.is-loading .stat-value, .instrument.is-loading .stat-label,
+        .instrument.is-loading .stat-delta, .instrument.is-loading .instrument-caption { visibility: hidden; }
 
-        /* ── Quick filters ───────────────────────────────────────────── */
-        .filter-block { padding: 0 20px 16px; border-bottom: 1px solid var(--divider-color, rgba(255,255,255,0.08)); }
-        .quick-filters { display: flex; gap: 6px; flex-wrap: wrap; }
+        /* ── Quick filters ───────────────────────────────────────────────
+           One row that scrolls sideways on a phone instead of wrapping
+           into two ragged lines; the chips run to the card edge so the
+           cut-off chip signals there's more. */
+        .filter-block { padding-bottom: 14px; }
+        .quick-filters {
+          display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none;
+          padding: 2px 20px; scroll-padding-inline: 20px;
+        }
+        .quick-filters::-webkit-scrollbar { display: none; }
         .chip {
-          font-family: var(--font-mono); font-size: 0.72rem; font-weight: 600;
+          flex: none; font: inherit; font-size: 0.8rem; font-weight: 500;
           background: rgba(127,127,127,0.12); border: 1px solid transparent;
           color: var(--secondary-text-color, #aaa); border-radius: 100px;
           padding: 7px 13px; cursor: pointer;
@@ -274,34 +320,32 @@ class MercedesTripsCard extends HTMLElement {
         .chip-custom { display: inline-flex; align-items: center; gap: 5px; }
         .chip-custom .caret { font-size: 0.65em; transition: transform .15s; }
         .chip-custom[aria-expanded="true"] .caret { transform: rotate(180deg); }
-        .chip:focus-visible, .btn:focus-visible, input:focus-visible, select:focus-visible {
+        .chip:focus-visible, .btn:focus-visible, .filter-clear:focus-visible, input:focus-visible, select:focus-visible {
           outline: 2px solid var(--accent); outline-offset: 2px;
         }
 
-        .custom-range { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--divider-color, rgba(255,255,255,0.12)); }
+        .custom-range { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 12px 20px 0; padding-top: 12px; border-top: 1px dashed var(--divider-color, rgba(255,255,255,0.12)); }
         .field { display: flex; align-items: center; gap: 6px; background: rgba(127,127,127,0.1); border: 1px solid transparent; border-radius: 100px; padding: 5px 12px; }
-        .field label { font-family: var(--font-mono); font-size: 0.64rem; letter-spacing: .05em; text-transform: uppercase; color: var(--secondary-text-color, #aaa); }
-        .field input, .field select { border: none; background: transparent; color: inherit; font-family: var(--primary-font-family, sans-serif); font-size: 0.8rem; outline: none; }
-        .field select { font-family: var(--font-mono); cursor: pointer; }
+        .field label { font-size: 0.75rem; color: var(--secondary-text-color, #aaa); }
+        .field input, .field select { border: none; background: transparent; color: inherit; font: inherit; font-size: 0.8rem; outline: none; }
+        .field select { cursor: pointer; }
         .field .sep { color: var(--secondary-text-color, #aaa); font-size: 0.76rem; }
         .field:focus-within { border-color: var(--accent); }
 
         .btn {
-          font-family: var(--font-mono); font-size: 0.7rem; font-weight: 700;
-          letter-spacing: .05em; text-transform: uppercase; border: none;
-          border-radius: 100px; padding: 8px 15px; cursor: pointer;
+          font: inherit; font-size: 0.8rem; font-weight: 600; border: none;
+          border-radius: 100px; padding: 8px 16px; cursor: pointer;
         }
         .btn-primary { background: var(--accent); color: var(--accent-on); }
         .btn-primary:hover { filter: brightness(1.1); }
 
-        .filter-summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; font-size: 0.78rem; color: var(--secondary-text-color, #aaa); }
-        .filter-summary b { color: var(--primary-text-color, #fff); font-weight: 600; }
+        .filter-summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 12px 20px 0; font-size: 0.8rem; color: var(--secondary-text-color, #aaa); }
         .filter-clear {
-          font-family: var(--font-mono); font-size: 0.66rem; background: none; border: none;
-          color: var(--secondary-text-color, #aaa); text-decoration: underline; text-underline-offset: 2px;
-          cursor: pointer; padding: 2px;
+          font: inherit; font-size: 0.78rem; background: none; border: none;
+          color: var(--accent); cursor: pointer; padding: 2px; white-space: nowrap;
         }
-        .filter-clear:hover { color: var(--primary-text-color, #fff); }
+        .filter-clear:hover { text-decoration: underline; text-underline-offset: 2px; }
+        .filter-clear[hidden] { display: none; }
 
         /* ── Map container ─────────────────────────────────────────────
            Position MUST be relative so Leaflet's absolute children are
@@ -316,15 +360,19 @@ class MercedesTripsCard extends HTMLElement {
           overflow: hidden;
         }
         #map { width: 100%; height: 100%; }
+        /* OSM only serves light tiles. In a dark HA theme, invert just the
+           tile pane — routes and markers live in other panes and keep
+           their real colors — so the map doesn't glare out of the card. */
+        .card.dark .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.95) contrast(.85) saturate(.4); }
 
         /* ── Full Leaflet CSS inlined — CDN link is a bonus; these rules
            are the authoritative source so HA's CSP cannot block them. ── */
         .leaflet-container {
           position: relative !important; overflow: hidden !important;
-          background: #ddd; outline: 0; cursor: grab; -webkit-tap-highlight-color: transparent;
+          background: var(--secondary-background-color, #ddd); outline: 0; cursor: grab; -webkit-tap-highlight-color: transparent;
         }
         .leaflet-container:focus { outline: none; }
-        .leaflet-container a { color: #0078A8; }
+        .leaflet-container a { color: var(--accent); }
         .leaflet-container a.leaflet-active { outline: 2px solid orange; }
 
         .leaflet-map-pane, .leaflet-tile, .leaflet-marker-icon, .leaflet-marker-shadow,
@@ -358,22 +406,24 @@ class MercedesTripsCard extends HTMLElement {
         .leaflet-left   { left: 0; }
         .leaflet-right  { right: 0; }
 
-        .leaflet-control-zoom { border: 2px solid rgba(0,0,0,0.2); border-radius: 4px; }
+        .leaflet-control-zoom { border: 1px solid var(--divider-color, rgba(0,0,0,0.2)); border-radius: 8px; overflow: hidden; }
         .leaflet-bar a, .leaflet-bar a:hover {
-          background-color: #fff; border-bottom: 1px solid #ccc;
-          width: 26px; height: 26px; display: block;
-          text-align: center; line-height: 26px; text-decoration: none; color: black;
+          background-color: var(--card-background-color, #fff); border-bottom: 1px solid var(--divider-color, #ccc);
+          width: 28px; height: 28px; display: block;
+          text-align: center; line-height: 28px; text-decoration: none; color: var(--primary-text-color, #000);
         }
-        .leaflet-bar a:first-child { border-top-left-radius: 4px; border-top-right-radius: 4px; }
-        .leaflet-bar a:last-child  { border-bottom-left-radius: 4px; border-bottom-right-radius: 4px; border-bottom: none; }
-        .leaflet-bar a.leaflet-disabled { cursor: default; background-color: #f4f4f4; color: #bbb; }
+        .leaflet-bar a:last-child { border-bottom: none; }
+        .leaflet-bar a.leaflet-disabled { cursor: default; color: var(--disabled-text-color, #bbb); }
 
         .leaflet-zoom-animated { transition: transform 0.25s cubic-bezier(0,0,0.25,1); }
         .leaflet-pan-anim  .leaflet-tile, .leaflet-zoom-anim .leaflet-tile { transition: none; }
         .leaflet-zoom-anim .leaflet-zoom-animated { will-change: transform; }
 
-        .leaflet-control-attribution, .leaflet-control-scale-line {
-          padding: 0 5px; background: rgba(255,255,255,0.8); box-shadow: 0 0 5px #bbb;
+        /* Doubled-up selector: leaflet.css (also loaded) paints this box
+           white with .leaflet-container .leaflet-control-attribution. */
+        .leaflet-container .leaflet-control-attribution, .leaflet-control-scale-line {
+          padding: 0 6px; background: color-mix(in srgb, var(--card-background-color, #fff) 85%, transparent);
+          color: var(--secondary-text-color, #555); border-top-left-radius: 6px;
           font-size: 11px; white-space: nowrap; overflow: hidden;
         }
         .leaflet-control-attribution a { text-decoration: none; }
@@ -388,50 +438,69 @@ class MercedesTripsCard extends HTMLElement {
         .leaflet-fade-anim .leaflet-popup { opacity: 0; transition: opacity 0.2s linear; }
         .leaflet-fade-anim .leaflet-map-pane .leaflet-popup { opacity: 1; }
 
-        /* ── Trip list ───────────────────────────────────────────────── */
-        .list-head, .trip-row, .list-total {
-          display: grid; grid-template-columns: 30px 1fr 64px 64px 84px; gap: 8px;
-          align-items: center; padding: 0 20px;
-        }
-        .list-head {
-          padding-top: 4px; padding-bottom: 8px;
-          font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: .07em; text-transform: uppercase;
-          color: var(--secondary-text-color, #aaa);
+        /* ── Logbook: trips grouped by day ──────────────────────────────
+           Each trip is a two-stop itinerary. Its rail is the same color
+           as its line on the map (start filled, end hollow), so a row
+           and its route read as one thing. */
+        .trip-list {
+          position: relative; /* offsetParent for keeping the open trip in view */
+          max-height: 380px; overflow-y: auto; overscroll-behavior: contain;
           border-top: 1px solid var(--divider-color, rgba(255,255,255,0.08));
         }
-        .list-head .num, .trip-row .num, .list-total .num { text-align: right; }
-        .trip-list { max-height: 320px; overflow-y: auto; padding-bottom: 4px; }
-        .trip-row {
-          padding-top: 10px; padding-bottom: 10px;
-          border-top: 1px solid var(--divider-color, rgba(255,255,255,0.06));
-          cursor: pointer; font-size: 0.82rem;
+        .day-head {
+          position: sticky; top: 0; z-index: 1;
+          display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+          padding: 12px 20px 6px;
+          background: var(--card-background-color, #1c1c1e);
+          font-size: 0.78rem; font-weight: 600; color: var(--secondary-text-color, #aaa);
         }
-        .trip-row:hover { background: rgba(127,127,127,0.08); }
-        .trip-row.selected { background: rgba(127,127,127,0.14); }
+        .day-head .day-km { font-weight: 500; font-variant-numeric: tabular-nums; }
+        .trip {
+          display: grid; grid-template-columns: 12px auto minmax(0, 1fr) auto;
+          column-gap: 12px; row-gap: 4px; align-items: center;
+          width: 100%; margin: 0; padding: 8px 20px; border: none; background: none;
+          color: inherit; font: inherit; font-size: 0.86rem; line-height: 1.3;
+          text-align: left; cursor: pointer;
+        }
+        .trip:hover { background: rgba(127,127,127,0.08); }
+        .trip[aria-expanded="true"] { background: rgba(127,127,127,0.12); }
+        .trip:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
         /* Mirrors the map dimming: once something's selected, everything
            else steps back so the pair (row + route) reads as one unit. */
-        .trip-list.has-selection .trip-row:not(.selected) { opacity: .45; }
-        .trip-list.has-selection .trip-row:not(.selected):hover { opacity: .75; }
+        .trip-list.has-selection .trip:not([aria-expanded="true"]) { opacity: .45; }
+        .trip-list.has-selection .trip:not([aria-expanded="true"]):hover { opacity: .75; }
 
-        /* route glyph: start · spine · end — echoes the polyline on the map */
-        .glyph { width: 12px; height: 32px; position: relative; margin: 0 auto; }
-        .glyph i { position: absolute; left: 50%; transform: translateX(-50%); width: 7px; height: 7px; border-radius: 50%; }
-        .glyph .start { top: 0; background: var(--route-color, var(--accent)); }
-        .glyph .end { bottom: 0; background: var(--secondary-text-color, #aaa); opacity: .5; }
-        .glyph .spine { position: absolute; left: 50%; top: 6px; bottom: 6px; width: 2px; transform: translateX(-50%); background: var(--route-color, var(--accent)); opacity: .35; }
+        .rail { grid-row: 1 / 3; align-self: stretch; position: relative; }
+        .rail::before {
+          /* Stops at the end dot's edge so the hollow dot stays hollow
+             over any row background (hover, selected). */
+          content: ""; position: absolute; left: 50%; top: .65em; bottom: calc(.65em + 4.5px);
+          width: 2px; transform: translateX(-50%); background: var(--route-color); opacity: .4;
+        }
+        .rail i {
+          position: absolute; left: 50%; width: 9px; height: 9px; border-radius: 50%;
+          box-sizing: border-box; transform: translate(-50%, -50%);
+        }
+        .rail .from { top: .65em; background: var(--route-color); }
+        .rail .to { top: calc(100% - .65em); border: 2px solid var(--route-color); }
+        .trip .time { font-size: 0.8rem; font-variant-numeric: tabular-nums; color: var(--secondary-text-color, #aaa); }
+        .trip .place { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .trip .place .town { color: var(--secondary-text-color, #aaa); }
+        .trip .val { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+        .trip .val.energy { font-size: 0.8rem; color: var(--secondary-text-color, #aaa); }
 
-        .trip-route { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-        .trip-route .main { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .trip-route .sub { font-family: var(--font-mono); font-size: 0.66rem; color: var(--secondary-text-color, #aaa); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .trip-row .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
-        .trip-row .num.date { color: var(--secondary-text-color, #aaa); font-size: 0.7rem; }
-
-        .list-total { padding-top: 10px; padding-bottom: 10px; background: rgba(127,127,127,0.06); border-top: 1px solid var(--divider-color, rgba(255,255,255,0.1)); }
-        .list-total .label { grid-column: 2; font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: .05em; text-transform: uppercase; color: var(--secondary-text-color, #aaa); }
-        .list-total .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 700; font-size: 0.8rem; }
+        /* Expanded trip — opens right under its row, not at the bottom of
+           a list that may be scrolled out of sight. Indented to line up
+           with the time column. */
+        .trip-detail { padding: 2px 20px 14px 44px; background: rgba(127,127,127,0.12); font-size: 0.8rem; }
+        .trip-detail .where { margin: 0 0 12px; color: var(--secondary-text-color, #aaa); line-height: 1.45; }
+        .trip-detail .where span { color: var(--primary-text-color, #fff); }
+        .trip-detail dl { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 12px; margin: 0; }
+        .trip-detail dt { font-size: 0.72rem; color: var(--secondary-text-color, #aaa); }
+        .trip-detail dd { margin: 2px 0 0; font-weight: 600; font-variant-numeric: tabular-nums; }
 
         /* ── Empty & loading states ──────────────────────────────────── */
-        .empty-state { margin: 8px 20px 20px; padding: 30px 16px; text-align: center; border: 1px dashed var(--divider-color, rgba(255,255,255,0.15)); border-radius: 12px; }
+        .empty-state { margin: 16px 20px 20px; padding: 30px 16px; text-align: center; border: 1px dashed var(--divider-color, rgba(255,255,255,0.15)); border-radius: 12px; }
         .empty-title { font-family: var(--font-display); font-weight: 700; font-size: 1rem; margin: 0 0 6px; }
         .empty-body { font-size: 0.82rem; color: var(--secondary-text-color, #aaa); max-width: 40ch; margin: 0 auto 14px; }
         .skeleton {
@@ -439,31 +508,20 @@ class MercedesTripsCard extends HTMLElement {
           background-size: 200% 100%; border-radius: 6px; animation: mt-shimmer 1.6s ease-in-out infinite;
         }
         @keyframes mt-shimmer { to { background-position: -200% 0; } }
-        .skel-row { display: grid; grid-template-columns: 30px 1fr 64px; gap: 8px; align-items: center; padding: 10px 20px; border-top: 1px solid var(--divider-color, rgba(255,255,255,0.06)); }
-        .skel-row .skeleton.dot { width: 12px; height: 12px; border-radius: 50%; margin: 0 auto; }
+        .skel-row { display: grid; grid-template-columns: 12px 1fr 48px; gap: 12px; align-items: center; padding: 10px 20px; }
+        .skel-row .skeleton.dot { width: 9px; height: 9px; border-radius: 50%; }
         .skel-row .skeleton.line { height: 12px; }
         .skel-row .skeleton.line.short { width: 40%; margin-top: 6px; }
-
-        /* ── Trip detail readout ─────────────────────────────────────── */
-        .detail-panel { margin: 4px 20px 20px; padding: 14px 16px; border-radius: 12px; background: rgba(127,127,127,0.06); border: 1px solid var(--divider-color, rgba(255,255,255,0.08)); font-size: 0.82rem; display: none; }
-        .detail-panel.visible { display: block; }
-        .detail-route { font-family: var(--font-display); font-weight: 700; font-size: 0.96rem; margin: 0 0 10px; text-wrap: balance; }
-        .detail-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 8px; }
-        .detail-item label { display: block; font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: .05em; text-transform: uppercase; color: var(--secondary-text-color, #aaa); margin-bottom: 2px; }
-        .detail-item span { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 700; }
-
-        .active-badge { display: none; }
 
         /* Container queries react to this card's own rendered width, not
            the browser viewport — the correct signal in a dashboard where
            the same card can sit in a wide single-column view or a narrow
            "sections" grid column regardless of window size. */
-        @container mt-card (max-width: 480px) {
+        @container mt-card (max-width: 600px) {
           .instrument { grid-template-columns: repeat(2, 1fr); row-gap: 12px; }
-          .instrument .stat:nth-child(3) { border-left: none; }
-          .list-head, .trip-row, .list-total { grid-template-columns: 24px 1fr 50px 50px; }
-          .list-head .date, .trip-row .date { display: none; }
-          .detail-grid { grid-template-columns: repeat(2, 1fr); }
+          .instrument .stat:nth-child(3) { border-left: none; padding-left: 4px; }
+          .instrument .stat:nth-child(2) { padding-right: 4px; }
+          .trip-detail dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         }
         /* Even a 2-column instrument can get tight in a very narrow
            column — drop to a single column rather than let it overflow. */
@@ -476,29 +534,27 @@ class MercedesTripsCard extends HTMLElement {
         @media (prefers-reduced-motion: reduce) {
           .badge-live .dot { animation: none; }
           .skeleton { animation: none; background: rgba(127,127,127,0.18); }
+          .chip-custom .caret { transition: none; }
         }
       </style>
       <div class="card">
         <div class="card-header">
-          <div>
-            <span class="eyebrow">Mercedes-EQ · Cuaderno de ruta</span>
-            <h2 class="card-title">Trayectos</h2>
-          </div>
-          <span id="active-badge" class="badge-live"><span class="dot"></span>En ruta</span>
+          <h2 class="card-title" id="card-title"></h2>
+          <span id="active-badge" class="badge-live" style="display:none"><span class="dot"></span>En ruta</span>
         </div>
 
         <div class="instrument" id="instrument"></div>
 
         <div class="filter-block">
-          <div class="quick-filters" role="group" aria-label="Filtros rápidos de periodo">
+          <div class="quick-filters" role="group" aria-label="Periodo">
             ${QUICK_FILTERS.map(f => `<button class="chip" data-key="${f.key}">${f.label}</button>`).join("")}
             <button class="chip chip-custom" id="chip-custom" aria-expanded="false">Personalizado <span class="caret">▾</span></button>
           </div>
           <div class="custom-range" id="custom-range" style="display:none">
-            <div class="field"><label>Desde</label><input type="date" id="f-start"></div>
-            <div class="field"><label>Hasta</label><input type="date" id="f-end"></div>
+            <div class="field"><label for="f-start">Desde</label><input type="date" id="f-start"></div>
+            <div class="field"><label for="f-end">Hasta</label><input type="date" id="f-end"></div>
             <div class="field">
-              <label>Horario</label>
+              <label for="f-hour-start">Horas</label>
               <select id="f-hour-start">${Array.from({length:24}, (_,h) => `<option value="${h}">${_pad2(h)}:00</option>`).join("")}</select>
               <span class="sep">–</span>
               <select id="f-hour-end">${Array.from({length:24}, (_,h) => `<option value="${h}"${h===23?" selected":""}>${_pad2(h)}:00</option>`).join("")}</select>
@@ -507,7 +563,7 @@ class MercedesTripsCard extends HTMLElement {
           </div>
           <div class="filter-summary">
             <span id="filter-summary-text"></span>
-            <button class="filter-clear" id="btn-clear-filter">Quitar filtro ✕</button>
+            <button class="filter-clear" id="btn-clear-filter" hidden>Volver a ${_quickLabel(DEFAULT_QUICK_FILTER).toLowerCase()}</button>
           </div>
         </div>
 
@@ -515,14 +571,11 @@ class MercedesTripsCard extends HTMLElement {
           <div id="map"></div>
         </div>
 
-        <div class="list-head">
-          <div></div><div>Ruta</div><div class="num">km</div><div class="num">kWh</div><div class="num date">Fecha</div>
-        </div>
         <div class="trip-list" id="trip-list"></div>
-        <div class="list-total" id="list-total" style="display:none"></div>
-        <div class="detail-panel" id="detail-panel"></div>
       </div>
     `;
+    this.shadowRoot.getElementById("card-title").textContent = this._config.title || "Cuaderno de ruta";
+    this._applyTheme();
 
     this.shadowRoot.querySelectorAll(".chip[data-key]").forEach(chip => {
       chip.addEventListener("click", () => this._setQuickFilter(chip.dataset.key));
@@ -702,6 +755,10 @@ class MercedesTripsCard extends HTMLElement {
       if (active) chip.setAttribute("aria-pressed", "true");
       else chip.removeAttribute("aria-pressed");
     });
+    // Only offered once you've moved off the default — on the default it
+    // would be a button that does nothing.
+    const clear = this.shadowRoot.getElementById("btn-clear-filter");
+    if (clear) clear.hidden = this._quickFilter === DEFAULT_QUICK_FILTER;
     if (this._quickFilter !== "custom") {
       const panel = this.shadowRoot.getElementById("custom-range");
       const chip = this.shadowRoot.getElementById("chip-custom");
@@ -713,11 +770,11 @@ class MercedesTripsCard extends HTMLElement {
   // ── Data ─────────────────────────────────────────────────────────────
 
   async _fetchAndDraw() {
-    // Guard against overlapping requests (e.g. clicking two chips fast).
-    // A sequence number also lets the slower "previous period" fetch below
-    // detect it's stale and avoid overwriting a newer filter's numbers.
-    if (this._fetchInFlight) return;
-    this._fetchInFlight = true;
+    // Overlapping requests (e.g. clicking two chips fast) are allowed on
+    // purpose: the sequence number makes the latest filter win and any
+    // older response — including the slower "previous period" fetch
+    // below — get dropped. Skipping the new request instead would leave
+    // the new chip highlighted over the old filter's data.
     const seq = ++this._fetchSeq;
 
     this._renderSkeleton();
@@ -729,22 +786,24 @@ class MercedesTripsCard extends HTMLElement {
     if (hourStart > 0)  params.set("hour_start", hourStart);
     if (hourEnd < 23)   params.set("hour_end", hourEnd);
 
+    let trips = [], activeTrip = null;
     try {
       const headers = this._haToken ? { Authorization: `Bearer ${this._haToken}` } : {};
       const resp = await fetch(`/api/mercedes_trips/trips?${params}`, { headers });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json();
-      this._trips = data.trips || [];
-      this._activeTrip = data.active_trip || null;
+      trips = data.trips || [];
+      activeTrip = data.active_trip || null;
     } catch (e) {
       console.error("Mercedes Trips card: fetch error", e);
-      this._trips = [];
-      this._activeTrip = null;
-    } finally {
-      this._fetchInFlight = false;
     }
 
-    if (seq !== this._fetchSeq) return; // a newer filter already superseded this one
+    // A newer filter already superseded this one. Checked before touching
+    // this._trips: a stale response landing late must not swap the data
+    // out from under rows rendered for the newer filter.
+    if (seq !== this._fetchSeq) return;
+    this._trips = trips;
+    this._activeTrip = activeTrip;
 
     // A selection from a previous filter that fell out of the new range
     // would otherwise leave every route/row dimmed with nothing highlighted.
@@ -753,7 +812,6 @@ class MercedesTripsCard extends HTMLElement {
     }
 
     this._prevTotals = null;
-    this._prevLabel = (QUICK_FILTERS.find(f => f.key === this._quickFilter) || {}).deltaLabel || "vs. periodo anterior";
     this._renderInstrument();
     this._renderFilterSummary();
     const badge = this.shadowRoot.getElementById("active-badge");
@@ -766,7 +824,6 @@ class MercedesTripsCard extends HTMLElement {
       console.error("Mercedes Trips card: map render error", e);
     }
     this._renderList();
-    this._renderDetailPanel(this._selectedTrip);
 
     this._fetchPreviousTotals(seq);
   }
@@ -803,25 +860,33 @@ class MercedesTripsCard extends HTMLElement {
     return { distance, kwh, count, avg };
   }
 
-  // Renders "▲ 12% vs. periodo anterior". `judged` marks stats where one
-  // direction is objectively better (lower consumption), so the color
-  // carries meaning; otherwise the delta is informational only (driving
-  // more isn't "bad") and stays in a neutral tone.
+  // Renders "▲ 12 %". What it's compared against is said once, in the
+  // caption under the readout. `judged` marks stats where one direction
+  // is objectively better (lower consumption), so the color carries
+  // meaning; otherwise the delta is informational only (driving more
+  // isn't "bad") and stays in a neutral tone.
   _deltaBadge(curr, prev, { percent = true, judged = false } = {}) {
     if (prev == null || curr == null) return `<span class="stat-delta neutral">&nbsp;</span>`;
     let text, isUp;
     if (percent) {
-      if (!prev) return `<span class="stat-delta neutral">nuevo</span>`;
+      if (!prev) return `<span class="stat-delta neutral">Nuevo</span>`;
       const pct = ((curr - prev) / prev) * 100;
       isUp = pct >= 0;
-      text = `${isUp ? "▲" : "▼"} ${Math.abs(pct).toFixed(0)}%`;
+      text = `${isUp ? "▲" : "▼"} ${Math.abs(pct).toFixed(0)} %`;
     } else {
       const diff = curr - prev;
       isUp = diff >= 0;
       text = `${isUp ? "▲" : "▼"} ${Math.abs(Math.round(diff))}`;
     }
     const cls = judged ? (isUp ? "bad" : "good") : "neutral";
-    return `<span class="stat-delta ${cls}">${text} <span class="vs">${this._prevLabel}</span></span>`;
+    return `<span class="stat-delta ${cls}">${text}</span>`;
+  }
+
+  _comparisonCaption() {
+    const { startDate, endDate } = this._filters;
+    if (!startDate || !endDate) return "";
+    const days = Math.round((new Date(`${endDate}T00:00:00`) - new Date(`${startDate}T00:00:00`)) / 86400000) + 1;
+    return days === 1 ? "Comparado con el día anterior" : `Comparado con los ${days} días anteriores`;
   }
 
   _renderSkeleton() {
@@ -836,6 +901,7 @@ class MercedesTripsCard extends HTMLElement {
     }
     const list = this.shadowRoot.getElementById("trip-list");
     if (list) {
+      list.classList.remove("has-selection");
       list.innerHTML = Array.from({ length: 4 }).map(() => `
         <div class="skel-row">
           <div class="skeleton dot"></div>
@@ -843,8 +909,6 @@ class MercedesTripsCard extends HTMLElement {
           <div class="skeleton line" style="height:10px"></div>
         </div>`).join("");
     }
-    const total = this.shadowRoot.getElementById("list-total");
-    if (total) total.style.display = "none";
   }
 
   _renderInstrument() {
@@ -855,12 +919,11 @@ class MercedesTripsCard extends HTMLElement {
     const cur = this._computeCurrentTotals();
     const prev = this._prevTotals;
     const prevAvg = prev && prev.distance_km > 0 ? (prev.kwh_used / prev.distance_km) * 100 : null;
-    const rangeLabel = (QUICK_FILTERS.find(f => f.key === this._quickFilter) || { label: "Periodo" }).label;
 
     el.innerHTML = `
       <div class="stat">
-        <div class="stat-value">${_fmtNum(cur.distance, 1)}<span class="unit">km</span></div>
-        <div class="stat-label">${rangeLabel}</div>
+        <div class="stat-value">${_fmtKm(cur.distance)}<span class="unit">km</span></div>
+        <div class="stat-label">Distancia</div>
         ${this._deltaBadge(cur.distance, prev ? prev.distance_km : null)}
       </div>
       <div class="stat">
@@ -870,29 +933,26 @@ class MercedesTripsCard extends HTMLElement {
       </div>
       <div class="stat">
         <div class="stat-value">${_fmtNum(cur.kwh, 1)}<span class="unit">kWh</span></div>
-        <div class="stat-label">Energía usada</div>
+        <div class="stat-label">Energía</div>
         ${this._deltaBadge(cur.kwh, prev ? prev.kwh_used : null)}
       </div>
       <div class="stat">
-        <div class="stat-value">${cur.avg != null ? _fmtNum(cur.avg, 1) : "—"}<span class="unit">/100km</span></div>
+        <div class="stat-value">${cur.avg != null ? _fmtNum(cur.avg, 1) : "—"}<span class="unit">kWh/100 km</span></div>
         <div class="stat-label">Consumo medio</div>
         ${cur.avg != null ? this._deltaBadge(cur.avg, prevAvg, { judged: true }) : `<span class="stat-delta neutral">&nbsp;</span>`}
       </div>
+      <div class="instrument-caption">${this._comparisonCaption()}</div>
     `;
   }
 
+  // Just the dates — the trip count already sits in the readout above.
   _renderFilterSummary() {
     const el = this.shadowRoot.getElementById("filter-summary-text");
     if (!el) return;
-    const n = this._trips.length;
-    const { startDate, endDate } = this._filters;
-    let rangeText = "todo el historial";
-    if (startDate && endDate) {
-      rangeText = startDate === endDate
-        ? _formatDateOnly(startDate)
-        : `${_formatDateOnly(startDate)} – ${_formatDateOnly(endDate)}`;
-    }
-    el.innerHTML = `<b>${n} trayecto${n === 1 ? "" : "s"}</b> · ${rangeText}`;
+    const { startDate, endDate, hourStart, hourEnd } = this._filters;
+    let text = startDate && endDate ? _formatRange(startDate, endDate) : "Todo el historial";
+    if (hourStart > 0 || hourEnd < 23) text += `, de ${_pad2(hourStart)}:00 a ${_pad2(hourEnd)}:00`;
+    el.textContent = text;
   }
 
   _drawMap() {
@@ -948,7 +1008,7 @@ class MercedesTripsCard extends HTMLElement {
           radius: 5, color: "#fff", fillColor: color, fillOpacity: 1, weight: 2,
         }).addTo(this._map);
         m.bindTooltip(
-          `${_formatDate(trip.start_time)} ${_formatTime(trip.start_time)}<br>${trip.start_address || ""}`,
+          `${_formatDate(trip.start_time)} ${_formatTime(trip.start_time)}<br>${_esc(trip.start_address || "")}`,
           { direction: "top" }
         );
         m.on("click", () => this._selectTrip(trip));
@@ -999,53 +1059,111 @@ class MercedesTripsCard extends HTMLElement {
 
   _renderList() {
     const list = this.shadowRoot.getElementById("trip-list");
-    const totalEl = this.shadowRoot.getElementById("list-total");
     if (!list) return;
 
     if (this._trips.length === 0) {
+      // Point somewhere that actually widens the view: this month, or the
+      // whole year if this month is what came back empty.
+      const next = this._quickFilter === "month" ? "year" : "month";
+      list.classList.remove("has-selection");
       list.innerHTML = `
         <div class="empty-state">
-          <p class="empty-title">Sin trayectos en este rango</p>
-          <p class="empty-body">No hay viajes registrados en el periodo seleccionado. Prueba con un rango más amplio.</p>
-          <button class="btn btn-primary" id="empty-cta">Ver este mes</button>
+          <p class="empty-title">No hay trayectos en estas fechas</p>
+          <p class="empty-body">Prueba con un periodo más amplio.</p>
+          <button class="btn btn-primary" id="empty-cta">Ver ${_quickLabel(next).toLowerCase()}</button>
         </div>`;
-      if (totalEl) totalEl.style.display = "none";
       const cta = this.shadowRoot.getElementById("empty-cta");
-      if (cta) cta.addEventListener("click", () => this._setQuickFilter(DEFAULT_QUICK_FILTER));
+      if (cta) cta.addEventListener("click", () => this._setQuickFilter(next));
       return;
     }
 
-    list.classList.toggle("has-selection", !!this._selectedTrip);
-    list.innerHTML = this._trips.map((trip, i) => {
-      const color = ROUTE_COLORS[i % ROUTE_COLORS.length];
-      const sel = this._selectedTrip && this._selectedTrip.id === trip.id ? " selected" : "";
-      const km  = trip.distance_km != null ? trip.distance_km.toFixed(1) : "—";
-      const kwh = trip.kwh_used != null ? trip.kwh_used.toFixed(2) : "—";
-      return `
-        <div class="trip-row${sel}" data-idx="${i}" style="--route-color:${color}">
-          <div class="glyph"><i class="start"></i><i class="spine"></i><i class="end"></i></div>
-          <div class="trip-route">
-            <div class="main">${trip.start_address || "?"} → ${trip.end_address || "?"}</div>
-            <div class="sub">${_formatDate(trip.start_time)} ${_formatTime(trip.start_time)} · ${_formatDuration(trip.start_time, trip.end_time)}</div>
-          </div>
-          <div class="num">${km}</div>
-          <div class="num">${kwh}</div>
-          <div class="num date">${_formatDate(trip.start_time)}</div>
-        </div>`;
-    }).join("");
+    // The town is only worth showing when it isn't the usual one — on a
+    // phone it otherwise eats the room the street names need.
+    const townCount = new Map();
+    this._trips.forEach(t => [t.start_address, t.end_address].forEach(a => {
+      const { town } = _splitAddress(a);
+      if (town) townCount.set(town, (townCount.get(town) || 0) + 1);
+    }));
+    const homeTown = [...townCount.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+    const place = (addr) => {
+      const { street, town } = _splitAddress(addr);
+      const showTown = town && town !== homeTown && town !== street;
+      return `${_esc(street)}${showTown ? `<span class="town">, ${_esc(town)}</span>` : ""}`;
+    };
 
-    list.querySelectorAll(".trip-row").forEach((row, i) => {
-      row.addEventListener("click", () => this._selectTrip(this._trips[i]));
+    // Trips arrive newest first; group consecutive ones by local day.
+    const days = [];
+    this._trips.forEach((trip, i) => {
+      const key = _isoDate(new Date(trip.start_time));
+      let day = days[days.length - 1];
+      if (!day || day.key !== key) days.push(day = { key, items: [], km: 0 });
+      day.items.push({ trip, i });
+      day.km += trip.distance_km || 0;
     });
 
-    if (totalEl) {
-      const cur = this._computeCurrentTotals();
-      totalEl.style.display = "grid";
-      totalEl.innerHTML = `
-        <span class="label">Total filtrado</span>
-        <span class="num" style="grid-column:3">${_fmtNum(cur.distance, 1)}</span>
-        <span class="num" style="grid-column:4">${_fmtNum(cur.kwh, 1)}</span>`;
-    }
+    const selectedId = this._selectedTrip ? this._selectedTrip.id : null;
+    list.classList.toggle("has-selection", selectedId != null);
+    list.innerHTML = days.map(day => `
+      <section aria-label="${_esc(_dayLabel(day.key))}">
+        <div class="day-head"><span>${_esc(_dayLabel(day.key))}</span><span class="day-km">${_fmtKm(day.km)} km</span></div>
+        ${day.items.map(({ trip, i }) => {
+          const open = trip.id === selectedId;
+          return `
+            <button class="trip" data-idx="${i}" aria-expanded="${open}" style="--route-color:${ROUTE_COLORS[i % ROUTE_COLORS.length]}">
+              <span class="rail" aria-hidden="true"><i class="from"></i><i class="to"></i></span>
+              <span class="time">${_formatTime(trip.start_time)}</span>
+              <span class="place">${place(trip.start_address)}</span>
+              <span class="val">${_fmtKm(trip.distance_km)} km</span>
+              <span class="time">${_formatTime(trip.end_time)}</span>
+              <span class="place">${place(trip.end_address)}</span>
+              <span class="val energy">${trip.kwh_used != null ? `${_fmtNum(trip.kwh_used, 1)} kWh` : "—"}</span>
+            </button>
+            ${open ? this._tripDetailHTML(trip) : ""}`;
+        }).join("")}
+      </section>`).join("");
+
+    list.querySelectorAll(".trip").forEach(row => {
+      row.addEventListener("click", () => this._selectTrip(this._trips[Number(row.dataset.idx)]));
+    });
+  }
+
+  _tripDetailHTML(trip) {
+    const avg = trip.avg_kwh_per_100km != null ? `${_fmtNum(trip.avg_kwh_per_100km, 1)} kWh/100 km` : "—";
+    const soc = trip.soc_used != null ? `${_fmtNum(trip.soc_used, 0)} %` : "—";
+    const odo = trip.start_odometer != null && trip.end_odometer != null
+      ? `${_fmtKm(trip.start_odometer)} → ${_fmtKm(trip.end_odometer)} km` : "—";
+    return `
+      <div class="trip-detail">
+        <p class="where">
+          Salida: <span>${_esc(trip.start_address || "Ubicación desconocida")}</span><br>
+          Llegada: <span>${_esc(trip.end_address || "Ubicación desconocida")}</span>
+        </p>
+        <dl>
+          <div><dt>Duración</dt><dd>${_formatDuration(trip.start_time, trip.end_time)}</dd></div>
+          <div><dt>Consumo</dt><dd>${avg}</dd></div>
+          <div><dt>Batería usada</dt><dd>${soc}</dd></div>
+          <div><dt>Odómetro</dt><dd>${odo}</dd></div>
+        </dl>
+      </div>`;
+  }
+
+  // Keeps the open trip (row + its detail) visible inside the list's own
+  // scroll box — never scrolls the dashboard itself.
+  _revealSelectedRow() {
+    const list = this.shadowRoot.getElementById("trip-list");
+    const row = list && list.querySelector('.trip[aria-expanded="true"]');
+    if (!row) return;
+    const head = row.parentElement.querySelector(".day-head");
+    const detail = row.nextElementSibling && row.nextElementSibling.classList.contains("trip-detail")
+      ? row.nextElementSibling : row;
+    const top = row.offsetTop - (head ? head.offsetHeight : 0);
+    const bottom = detail.offsetTop + detail.offsetHeight;
+    let target = null;
+    if (top < list.scrollTop) target = top;
+    else if (bottom > list.scrollTop + list.clientHeight) target = Math.min(top, bottom - list.clientHeight);
+    if (target == null) return;
+    const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    list.scrollTo({ top: target, behavior: reduce ? "auto" : "smooth" });
   }
 
   _selectTrip(trip) {
@@ -1054,7 +1172,7 @@ class MercedesTripsCard extends HTMLElement {
     const deselecting = this._selectedTrip && this._selectedTrip.id === trip.id;
     this._selectedTrip = deselecting ? null : trip;
     this._renderList();
-    this._renderDetailPanel(this._selectedTrip);
+    if (!deselecting) this._revealSelectedRow();
 
     if (!this._map || !this._L) return;
     this._applyMapSelection();
@@ -1069,33 +1187,6 @@ class MercedesTripsCard extends HTMLElement {
     if (bounds.length > 0) {
       try { this._map.fitBounds(this._L.latLngBounds(bounds), { padding: [30, 30], maxZoom: 14 }); } catch(_) {}
     }
-  }
-
-  _renderDetailPanel(trip) {
-    const panel = this.shadowRoot.getElementById("detail-panel");
-    if (!panel) return;
-    if (!trip) { panel.className = "detail-panel"; return; }
-
-    const km  = trip.distance_km != null ? `${trip.distance_km.toFixed(2)} km` : "—";
-    const kwh = trip.kwh_used != null ? `${trip.kwh_used.toFixed(2)} kWh` : "—";
-    const avg = trip.avg_kwh_per_100km != null ? `${trip.avg_kwh_per_100km.toFixed(1)} /100km` : "—";
-    const soc = trip.soc_used != null ? `${trip.soc_used.toFixed(0)}%` : "—";
-    const wpts = (trip.waypoints || []).length;
-
-    panel.className = "detail-panel visible";
-    panel.innerHTML = `
-      <p class="detail-route">${trip.start_address || "?"} → ${trip.end_address || "?"}</p>
-      <div class="detail-grid">
-        <div class="detail-item"><label>Inicio</label><span>${_formatDate(trip.start_time)} ${_formatTime(trip.start_time)}</span></div>
-        <div class="detail-item"><label>Fin</label><span>${_formatDate(trip.end_time)} ${_formatTime(trip.end_time)}</span></div>
-        <div class="detail-item"><label>Duración</label><span>${_formatDuration(trip.start_time, trip.end_time)}</span></div>
-        <div class="detail-item"><label>Distancia</label><span>${km}</span></div>
-        <div class="detail-item"><label>Energía usada</label><span>${kwh}</span></div>
-        <div class="detail-item"><label>Consumo</label><span>${avg}</span></div>
-        <div class="detail-item"><label>SoC consumido</label><span>${soc}</span></div>
-        <div class="detail-item"><label>Puntos GPS</label><span>${wpts}</span></div>
-        <div class="detail-item"><label>Odómetro</label><span>${trip.start_odometer ?? "—"} → ${trip.end_odometer ?? "—"} km</span></div>
-      </div>`;
   }
 
   getCardSize() { return 8; }
