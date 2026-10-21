@@ -1,6 +1,6 @@
 # Security assurance case
 
-Why we believe Mercedes Trips meets its security requirements: what it must protect, where untrusted input comes in, which design principles it follows, which common weaknesses it counters and how that's checked. For reporting a vulnerability, see [SECURITY.md](../SECURITY.md).
+Why we believe Mercedes Logbook meets its security requirements: what it must protect, where untrusted input comes in, which design principles it follows, which common weaknesses it counters and how that's checked. For reporting a vulnerability, see [SECURITY.md](../SECURITY.md).
 
 ## What it must protect
 

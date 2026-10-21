@@ -15,7 +15,7 @@ What the project plans to do over the next year, until the end of 2027, and what
 ## Not planned
 
 - **A cloud service, accounts or telemetry**: the trips stay in your Home Assistant; that stays. The only outside services are Nominatim, for addresses, and OpenStreetMap's map tiles.
-- **Talking to Mercedes directly**: mbapi2020 does that, and does it well. Mercedes Trips builds on its entities.
+- **Talking to Mercedes directly**: mbapi2020 does that, and does it well. Mercedes Logbook builds on its entities.
 - **Platforms other than Home Assistant**.
 - **Controlling the car**: no locking, climate or charging commands; the logbook only reads.
 

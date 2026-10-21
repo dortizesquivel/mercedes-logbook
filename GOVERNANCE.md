@@ -1,6 +1,6 @@
 # Governance
 
-Mercedes Trips is a small open source project with one maintainer. This page says who decides what, how, and what happens if the maintainer is gone.
+Mercedes Logbook is a small open source project with one maintainer. This page says who decides what, how, and what happens if the maintainer is gone.
 
 ## Roles
 
