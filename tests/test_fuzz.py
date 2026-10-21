@@ -64,17 +64,22 @@ def test_odometer_reading_is_positive_finite_or_none(state, unit):
     assert result is None or (math.isfinite(result) and result > 0)
 
 
-@given(st.dictionaries(st.sampled_from(["start_date", "end_date", "hour_start", "hour_end"]), param_text))
-def test_filters_are_valid_or_rejected(query):
-    try:
-        start_date, end_date, hour_start, hour_end = http_views._filters(query)
-    except ValueError as exc:
-        assert str(exc).split()[0] in query  # the message names the parameter
+@given(
+    st.dictionaries(
+        st.sampled_from(["start_date", "end_date", "hour_start", "hour_end", "limit", "offset", "other"]), param_text
+    )
+)
+def test_parameters_are_valid_or_rejected(query):
+    params, error = http_views._parse(query, paging=True)
+    if error:
+        assert error.split()[0] in query  # the message names the parameter
         return
-    for value in (start_date, end_date):
-        assert value is None or http_views._DATE_RE.fullmatch(value)
-    for value in (hour_start, hour_end):
-        assert value is None or 0 <= value <= 23
+    for name in ("start_date", "end_date"):
+        assert params[name] is None or http_views._DATE_RE.fullmatch(params[name])
+    for name in ("hour_start", "hour_end"):
+        assert params[name] is None or 0 <= params[name] <= 23
+    assert 1 <= params["limit"] <= http_views.MAX_LIMIT
+    assert 0 <= params["offset"] <= http_views.MAX_OFFSET
 
 
 @pytest.fixture(scope="module")
