@@ -1,0 +1,30 @@
+name: Feature request
+description: Something you'd like Mercedes Trips to do.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before you write, check the [ideas already proposed](https://github.com/dortizesquivel/mercedes-logbook/discussions/categories/ideas) and give a 👍 to the ones you want; votes decide what comes first.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you're trying to do
+      description: The situation, in your words. For example, "I want to know how much my commute costs each month".
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What it could do
+      description: How you imagine it, in the integration, the card or both. A sketch or a screenshot of something similar helps.
+  - type: input
+    id: car
+    attributes:
+      label: Your car
+      placeholder: EQA 250+, GLC 300e…
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+      description: How you use the logbook, other integrations you combine it with…

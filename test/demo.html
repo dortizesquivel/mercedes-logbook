@@ -10,8 +10,9 @@
   <style>
     /* Stand-ins for the HA theme variables the card reads. Dark by
        default; open with ?theme=light for the light theme, ?w=360 to
-       squeeze the card to a phone-width column and ?lang=en (or any
-       language tag) to switch the UI language. */
+       squeeze the card to a phone-width column, ?lang=en (or any
+       language tag) to switch the UI language and ?embed=1 to show only
+       the card. */
     body {
       --primary-color: #4c7bf4;
       --text-primary-color: #fff;
@@ -50,6 +51,11 @@
     mercedes-trips-card {
       display: block;
     }
+    /* ?embed=1: just the card, edge to edge on a transparent page, for the
+       landing page's iframe (site/index.html), which sizes itself to it. */
+    body.embed { padding: 0; min-height: 0; background: transparent; }
+    body.embed h1 { display: none; }
+    body.embed .container { max-width: none; }
   </style>
 </head>
 <body>
@@ -61,7 +67,19 @@
     const qs = new URLSearchParams(location.search);
     const DARK = qs.get("theme") !== "light";
     if (!DARK) document.body.classList.add("light");
+    // Matches the embedding page's color-scheme, or the browser paints an
+    // opaque backdrop behind a transparent iframe.
+    document.documentElement.style.colorScheme = DARK ? "dark" : "light";
     if (qs.get("w")) document.querySelector(".container").style.maxWidth = `${qs.get("w")}px`;
+    if (qs.has("embed")) {
+      document.body.classList.add("embed");
+      // Inside a page, the mouse wheel should scroll the page, not zoom the
+      // map: maps created from here on zoom with the buttons and pinch only.
+      // The card creates its map a frame after Leaflet loads, so this check
+      // runs first.
+      const noWheelZoom = () => window.L ? L.Map.mergeOptions({ scrollWheelZoom: false }) : requestAnimationFrame(noWheelZoom);
+      noWheelZoom();
+    }
 
     // ── Mock data so the card has realistic trips without a real HA instance ──
     // Trips are generated relative to today so "Hoy", "Ayer" and the

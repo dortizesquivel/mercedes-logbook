@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ideas and votes
+    url: https://github.com/dortizesquivel/mercedes-logbook/discussions/categories/ideas
+    about: Propose an idea or vote for the ones you want with a 👍.
+  - name: Questions and help
+    url: https://github.com/dortizesquivel/mercedes-logbook/discussions/categories/q-a
+    about: Setting up mbapi2020, the integration or the card, or something that isn't clear.
+  - name: Show your setup
+    url: https://github.com/dortizesquivel/mercedes-logbook/discussions/categories/show-and-tell
+    about: Share how you use it. It helps decide what to improve.
+  - name: Report a security problem
+    url: https://github.com/dortizesquivel/mercedes-logbook/security/advisories/new
+    about: Privately, as SECURITY.md explains.
