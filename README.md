@@ -166,7 +166,7 @@ It needs a signed-in Home Assistant user, but **any** user, not only admins: eve
 | `hour_start` | `0`–`23` | Minimum trip start hour |
 | `hour_end` | `0`–`23` | Maximum trip start hour |
 | `limit` | `1`–`1000` | Max results (default `200`) |
-| `offset` | `0` or more | Pagination offset (default `0`) |
+| `offset` | `0`–`1000000` | Pagination offset (default `0`) |
 
 Hours are the local time the trip started. Any other value, such as a date in another format or an hour of 24, gets **HTTP 400**.
 
@@ -210,7 +210,7 @@ Each trip has every column of the database's `trips` table, so it also has its o
 
 | Endpoint | Returns |
 |---|---|
-| `GET /api/mercedes_trips/trips/{id}` | One trip, with its waypoints |
+| `GET /api/mercedes_trips/trips/{id}` | One trip, with its waypoints. An `id` that isn't a positive whole number gets HTTP 400; one that doesn't exist, 404 |
 | `GET /api/mercedes_trips/totals` | `trip_count`, `distance_km` and `kwh_used` for the same `start_date` / `end_date` / `hour_start` / `hour_end` filters, without waypoints |
 
 ## Database

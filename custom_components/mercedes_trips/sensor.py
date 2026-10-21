@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
 from homeassistant.const import UnitOfEnergy, UnitOfLength
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -160,7 +160,7 @@ class LastTripSensor(_BaseTripSensor):
 class ActiveTripSensor(_BaseTripSensor):
     _attr_icon = "mdi:car-connected"
     _attr_device_class = SensorDeviceClass.ENUM
-    _attr_options = ["active", "idle"]
+    _attr_options = ["active", "idle"]  # noqa: RUF012 — HA's own type for it; never mutated
 
     def __init__(self, coordinator, entry):
         super().__init__(coordinator, entry, "active_trip")

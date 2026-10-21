@@ -1,22 +1,21 @@
 from __future__ import annotations
 
-import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers import selector
+from homeassistant.helpers import entity_registry as er, selector
+import voluptuous as vol
 
 from .const import (
-    DOMAIN,
-    CONF_ODOMETER_ENTITY,
-    CONF_TRACKER_ENTITY,
-    CONF_SOC_ENTITY,
-    CONF_RANGE_ENTITY,
     CONF_BATTERY_CAPACITY,
     CONF_INACTIVITY_TIMEOUT,
     CONF_MIN_TRIP_DISTANCE,
+    CONF_ODOMETER_ENTITY,
+    CONF_RANGE_ENTITY,
+    CONF_SOC_ENTITY,
+    CONF_TRACKER_ENTITY,
     DEFAULT_INACTIVITY_TIMEOUT,
     DEFAULT_MIN_DISTANCE,
+    DOMAIN,
     MBAPI2020_DOMAIN,
 )
 

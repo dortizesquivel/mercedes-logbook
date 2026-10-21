@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from datetime import date
+from functools import partial
 import json
+import re
 
 from aiohttp import web
 from homeassistant.components.http import HomeAssistantView
@@ -9,6 +12,58 @@ from homeassistant.helpers.http import KEY_HASS
 
 from .const import DOMAIN
 from .coordinator import TripCoordinator
+
+DEFAULT_LIMIT = 200
+MAX_LIMIT = 1000
+# Far past any real logbook; it only keeps OFFSET inside SQLite's integer range.
+MAX_OFFSET = 1_000_000
+# Trip ids are SQLite rowids: a larger number can't exist and wouldn't even bind.
+_MAX_TRIP_ID = 2**63 - 1
+# date.fromisoformat() also takes "20261006" and week dates; the API only takes YYYY-MM-DD.
+_DATE_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
+# The whole-number parameters: default when absent, and the range they must be in.
+_HOURS = {"hour_start": (None, 0, 23), "hour_end": (None, 0, 23)}
+_PAGING = {"limit": (DEFAULT_LIMIT, 1, MAX_LIMIT), "offset": (0, 0, MAX_OFFSET)}
+
+
+def _is_date(value: str) -> bool:
+    if not _DATE_RE.fullmatch(value):
+        return False
+    try:
+        date.fromisoformat(value)
+    except ValueError:  # 2026-02-30 and the like
+        return False
+    return True
+
+
+def _whole_number(value: str, low: int, high: int) -> int | None:
+    try:
+        number = int(value)
+    except ValueError:
+        return None
+    return number if low <= number <= high else None
+
+
+def _parse(query, paging: bool = False) -> tuple[dict, str | None]:
+    """The filters (and with paging, limit/offset) as keyword arguments for
+    get_trips() and get_trip_totals(), or the message for a 400 response.
+
+    The message is built here, never from an exception, so nothing about the
+    server can end up in a response.
+    """
+    params: dict = {}
+    for name in ("start_date", "end_date"):
+        value = query.get(name)
+        if value and not _is_date(value):  # absent or empty: no filter, as before
+            return {}, f"{name} must be a date, YYYY-MM-DD"
+        params[name] = value or None
+    for name, (default, low, high) in ({**_PAGING, **_HOURS} if paging else _HOURS).items():
+        value = query.get(name)
+        number = default if value is None else _whole_number(value, low, high)
+        if value is not None and number is None:
+            return {}, f"{name} must be a whole number from {low} to {high}"
+        params[name] = number
+    return params, None
 
 
 def _get_coordinator(hass: HomeAssistant) -> TripCoordinator | None:
@@ -30,28 +85,11 @@ class TripsListView(HomeAssistantView):
         if coordinator is None:
             return web.Response(status=503, text="Integration not loaded")
 
-        try:
-            limit = int(request.rel_url.query.get("limit", 200))
-            offset = int(request.rel_url.query.get("offset", 0))
-            start_date = request.rel_url.query.get("start_date")
-            end_date = request.rel_url.query.get("end_date")
-            hour_start = request.rel_url.query.get("hour_start")
-            hour_end = request.rel_url.query.get("hour_end")
+        params, error = _parse(request.rel_url.query, paging=True)
+        if error:
+            return web.Response(status=400, text=error)
 
-            hour_start = int(hour_start) if hour_start is not None else None
-            hour_end = int(hour_end) if hour_end is not None else None
-        except (ValueError, TypeError) as exc:
-            return web.Response(status=400, text=str(exc))
-
-        trips = await hass.async_add_executor_job(
-            coordinator.get_trips,
-            limit,
-            offset,
-            start_date,
-            end_date,
-            hour_start,
-            hour_end,
-        )
+        trips = await hass.async_add_executor_job(partial(coordinator.get_trips, **params))
 
         # Parse waypoints from JSON string to list
         for t in trips:
@@ -92,20 +130,11 @@ class TripTotalsView(HomeAssistantView):
         if coordinator is None:
             return web.Response(status=503, text="Integration not loaded")
 
-        try:
-            start_date = request.rel_url.query.get("start_date")
-            end_date = request.rel_url.query.get("end_date")
-            hour_start = request.rel_url.query.get("hour_start")
-            hour_end = request.rel_url.query.get("hour_end")
+        params, error = _parse(request.rel_url.query)
+        if error:
+            return web.Response(status=400, text=error)
 
-            hour_start = int(hour_start) if hour_start is not None else None
-            hour_end = int(hour_end) if hour_end is not None else None
-        except (ValueError, TypeError) as exc:
-            return web.Response(status=400, text=str(exc))
-
-        totals = await hass.async_add_executor_job(
-            coordinator.get_trip_totals, start_date, end_date, hour_start, hour_end
-        )
+        totals = await hass.async_add_executor_job(partial(coordinator.get_trip_totals, **params))
         return web.Response(content_type="application/json", text=json.dumps(totals))
 
 
@@ -123,6 +152,8 @@ class TripDetailView(HomeAssistantView):
         try:
             tid = int(trip_id)
         except ValueError:
+            return web.Response(status=400, text="Invalid trip_id")
+        if not 0 < tid <= _MAX_TRIP_ID:
             return web.Response(status=400, text="Invalid trip_id")
 
         trip = await hass.async_add_executor_job(coordinator.get_trip, tid)

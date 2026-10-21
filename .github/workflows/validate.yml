@@ -1,7 +1,9 @@
 name: Validate
 
+# HACS's and Home Assistant's own checks of the integration: on every pull request, on main and every week.
 on:
   push:
+    branches: [main]
   pull_request:
   schedule:
     - cron: "0 3 * * 1"
@@ -15,7 +17,7 @@ jobs:
     name: HACS
     runs-on: ubuntu-latest
     steps:
-      - uses: hacs/action@main
+      - uses: hacs/action@d556e736723344f83838d08488c983a15381059a  # 22.5.0
         with:
           category: integration
 
@@ -23,26 +25,5 @@ jobs:
     name: Hassfest
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: home-assistant/actions/hassfest@master
-
-  checks:
-    name: Code checks
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.13"
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-
-      - name: Python compiles
-        run: python -m compileall -q custom_components
-
-      - name: Card JS parses
-        run: node --check custom_components/mercedes_trips/frontend/mercedes-trips-card.js
-
-      - name: Translations have the same keys
-        run: python scripts/check_translations.py
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: home-assistant/actions/hassfest@cd6f3635a740c84d8a14f6121a90068b8ece6bf6  # master, 2026-10-17

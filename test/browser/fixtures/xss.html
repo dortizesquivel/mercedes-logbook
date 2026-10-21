@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Mercedes Trips card: hostile text</title>
+</head>
+<body>
+  <!-- Addresses come from OpenStreetMap's Nominatim, which anyone can edit, and the title from the
+       dashboard's YAML. None of it may run as code or become markup in the card. -->
+  <script type="module" src="/custom_components/mercedes_trips/frontend/mercedes-trips-card.js"></script>
+  <script type="module">
+    const IMG = `<img src=x onerror="window.__xss = 'img'">`;
+    const SCRIPT = `<script>window.__xss = 'script'<\/script>`;
+    const start = new Date(Date.now() - 3600e3).toISOString();
+    const end = new Date(Date.now() - 3000e3).toISOString();
+    const trip = (id, from, to) => ({
+      id, start_time: start, end_time: end, distance_km: 3.2, kwh_used: 0.6, avg_kwh_per_100km: 18.8,
+      soc_used: 1, start_odometer: 27310, end_odometer: 27313,
+      start_lat: 40.4169, start_lon: -3.7035, end_lat: 40.4153, end_lon: -3.6845,
+      start_address: from, end_address: to,
+      waypoints: [[40.4169, -3.7035, start], [40.4153, -3.6845, end]],
+    });
+    const TRIPS = [
+      trip(1, `${IMG}, 1, Sol, Madrid`, `Calle ${SCRIPT}, Retiro, ${IMG}`),
+      trip(2, `"><svg onload="window.__xss = 'svg'">, Madrid`, `' onmouseover='window.__xss = 1`),
+    ];
+    const card = document.createElement("mercedes-trips-card");
+    card.setConfig({ title: IMG });
+    card.hass = {
+      states: {},
+      themes: { darkMode: false },
+      locale: { language: "en", time_format: "24" },
+      config: { latitude: 40.4168, longitude: -3.7038 },
+      callApi: (method, path) => Promise.resolve(path.startsWith("mercedes_trips/totals")
+        ? { trip_count: 0, distance_km: 0, kwh_used: 0 }
+        : { trips: TRIPS, active_trip: null }),
+    };
+    document.body.appendChild(card);
+  </script>
+</body>
+</html>

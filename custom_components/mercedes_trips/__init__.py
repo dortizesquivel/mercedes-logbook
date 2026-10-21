@@ -43,7 +43,7 @@ def _frontend_content_hash() -> str:
     changes, with no need to remember to bump a version number by hand.
     """
     try:
-        return hashlib.sha1(FRONTEND_PATH.read_bytes()).hexdigest()[:10]
+        return hashlib.sha1(FRONTEND_PATH.read_bytes(), usedforsecurity=False).hexdigest()[:10]
     except OSError:
         return "0"
 
@@ -69,9 +69,11 @@ class MercedesTripsCardView(HomeAssistantView):
                 text=content,
                 headers={"Cache-Control": "no-cache"},
             )
-        except Exception as exc:
+        except (OSError, UnicodeDecodeError) as exc:
+            # The details go to the log only: this view needs no login, and
+            # the error would show the install's paths to anyone.
             _LOGGER.error("Mercedes Trips: could not serve card JS: %s", exc)
-            return web.Response(status=500, text=str(exc))
+            return web.Response(status=500, text="Could not read the card's script")
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
