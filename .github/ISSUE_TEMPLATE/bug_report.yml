@@ -1,0 +1,84 @@
+name: Bug report
+description: Something in the integration or the card doesn't work as it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting it. Security problems go privately through [Report a vulnerability](https://github.com/dortizesquivel/mercedes-logbook/security/advisories/new), not here.
+
+        Trips are location history: before you paste anything, remove addresses, coordinates, your car's VIN and its licence plate.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens
+      description: What you see, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen
+      description: The steps, so it can be reproduced.
+      placeholder: |
+        1. Drive for 10 minutes and park
+        2. Wait for the inactivity timeout
+        3. …
+    validations:
+      required: true
+  - type: dropdown
+    id: part
+    attributes:
+      label: Where
+      options:
+        - The integration (trips, sensors, setup, API)
+        - The dashboard card
+        - Both
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Mercedes Trips version
+      description: In HACS, or under Settings → Devices & services → Mercedes Trips.
+      placeholder: v1.5.0
+    validations:
+      required: true
+  - type: input
+    id: ha
+    attributes:
+      label: Home Assistant version
+      placeholder: 2026.10.2
+    validations:
+      required: true
+  - type: input
+    id: mbapi2020
+    attributes:
+      label: MercedesME 2020 (mbapi2020) version
+      description: In HACS.
+      placeholder: 0.43.0
+  - type: input
+    id: car
+    attributes:
+      label: Car
+      description: Model and year, and whether the account reports km or miles.
+      placeholder: EQB 300, 2024, km
+  - type: input
+    id: browser
+    attributes:
+      label: Browser or app
+      description: For problems with the card.
+      placeholder: Chrome 140 on Windows, the Home Assistant app on Android, a wall tablet…
+  - type: textarea
+    id: config
+    attributes:
+      label: Your settings
+      description: Optional. The integration's options (timeout, minimum distance, battery capacity) or the card's YAML. Remove anything private.
+      render: yaml
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Optional. From Settings → System → Logs, filtered by `mercedes_trips`; for the card, the red lines in the browser console (F12) that mention mercedes-trips. Remove addresses, coordinates, VIN and plate.
+      render: text
