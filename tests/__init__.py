@@ -1,1 +1,1 @@
-"""Tests for the Mercedes Trips integration."""
+"""Tests for the Mercedes Logbook integration."""
