@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime, timedelta
 import json
 import logging
 import math
-import os
 import sqlite3
 import time
-from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import aiohttp
@@ -265,8 +264,9 @@ class TripCoordinator:
 
             where = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
             params.extend([limit, offset])
+            # {where} only joins the fixed clauses above; every value is a ? parameter.
             rows = conn.execute(
-                f"SELECT * FROM trips {where} ORDER BY start_time DESC LIMIT ? OFFSET ?",
+                f"SELECT * FROM trips {where} ORDER BY start_time DESC LIMIT ? OFFSET ?",  # noqa: S608
                 params,
             ).fetchall()
             return [dict(r) for r in rows]
@@ -313,8 +313,9 @@ class TripCoordinator:
                 params.append(hour_end)
 
             where = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+            # {where} only joins the fixed clauses above; every value is a ? parameter.
             row = conn.execute(
-                f"SELECT COUNT(*), SUM(distance_km), SUM(kwh_used) FROM trips {where}",
+                f"SELECT COUNT(*), SUM(distance_km), SUM(kwh_used) FROM trips {where}",  # noqa: S608
                 params,
             ).fetchone()
             return {
@@ -414,7 +415,7 @@ class TripCoordinator:
             ) as resp:
                 resp.raise_for_status()
                 data = await resp.json()
-        except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as exc:
+        except (TimeoutError, aiohttp.ClientError, ValueError) as exc:
             # Not cached: a network blip mustn't pin this place to bare
             # coordinates forever. The next trip here will try again.
             _LOGGER.warning("Mercedes Trips: geocoding failed for %s,%s: %s", lat, lon, exc)
@@ -575,7 +576,7 @@ class TripCoordinator:
             try:
                 last_dt = datetime.fromisoformat(last_movement)
                 if last_dt.tzinfo is None:
-                    last_dt = last_dt.replace(tzinfo=timezone.utc)
+                    last_dt = last_dt.replace(tzinfo=UTC)
             except ValueError:
                 return
 
@@ -598,7 +599,7 @@ class TripCoordinator:
         try:
             last_dt = datetime.fromisoformat(last_movement)
             if last_dt.tzinfo is None:
-                last_dt = last_dt.replace(tzinfo=timezone.utc)
+                last_dt = last_dt.replace(tzinfo=UTC)
         except ValueError:
             self._active_trip = None
             await self._store.async_save(None)

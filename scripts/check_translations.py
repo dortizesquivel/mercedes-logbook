@@ -1,7 +1,7 @@
 """Fail if any translation file is missing a key another one has."""
 import json
-import sys
 from pathlib import Path
+import sys
 
 DIR = Path(__file__).resolve().parent.parent / "custom_components" / "mercedes_trips" / "translations"
 

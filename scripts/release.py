@@ -8,13 +8,13 @@ only prints them.
 """
 from __future__ import annotations
 
+from datetime import date
 import json
 import os
+from pathlib import Path
 import re
 import subprocess
 import sys
-from datetime import date
-from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 MANIFEST = ROOT / "custom_components" / "mercedes_trips" / "manifest.json"
