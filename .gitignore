@@ -4,3 +4,13 @@ __pycache__/
 *.db
 .playwright-mcp/
 release-notes.md
+
+# Tests and tooling
+.venv/
+node_modules/
+.coverage
+.pytest_cache/
+.hypothesis/
+.ruff_cache/
+test-results/
+playwright-report/

@@ -1,0 +1,47 @@
+# Tooling only: the integration is installed by HACS (or copied by hand), not as a Python package.
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+# pytest-homeassistant-custom-component runs every test in Home Assistant's own event loop.
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "--cov --cov-report=term-missing:skip-covered"
+
+[tool.coverage.run]
+source = ["custom_components/mercedes_trips"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 95
+show_missing = true
+
+[tool.ruff]
+target-version = "py314"
+line-length = 120
+extend-exclude = [".venv", "node_modules"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",    # pycodestyle
+    "F",         # pyflakes
+    "I",         # import order
+    "B",         # bugbear
+    "UP",        # pyupgrade
+    "SIM",       # simplifications
+    "ASYNC",     # blocking calls in async code
+    "S",         # bandit (security)
+    "BLE",       # blind except
+    "RUF",       # ruff's own
+]
+
+[tool.ruff.lint.per-file-ignores]
+# assert is how pytest checks; fixed fake tokens and coordinates aren't secrets.
+"tests/**" = ["S101", "S105", "S106"]
+# Release helpers run git with fixed arguments in CI.
+"scripts/**" = ["S603", "S607"]
+
+[tool.ruff.lint.isort]
+force-sort-within-sections = true
+known-first-party = ["custom_components"]
+combine-as-imports = true
