@@ -2,6 +2,7 @@
 
     python scripts/release.py bump patch|minor|major   → bumps manifest.json, prints vX.Y.Z
     python scripts/release.py notes vX.Y.Z [--dry-run] → release-notes.md + CHANGELOG.md
+    python scripts/release.py package                  → mercedes_trips.zip
 
 Notes come from the commit subjects since the previous v* tag. --dry-run
 only prints them.
@@ -15,6 +16,8 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import time
+import zipfile
 
 ROOT = Path(__file__).resolve().parent.parent
 MANIFEST = ROOT / "custom_components" / "mercedes_trips" / "manifest.json"
@@ -74,10 +77,31 @@ def notes(tag: str, dry_run: bool) -> None:
     print(body)
 
 
+def package() -> Path:
+    """mercedes_trips.zip: the integration's folder with its files at the root,
+    what goes in /config/custom_components/mercedes_trips/.
+
+    Made from the files git tracks, each with the commit's time and stored
+    uncompressed (zlib builds differ), so a tag always gives the same bytes:
+        git checkout vX.Y.Z && python scripts/release.py package
+    """
+    folder = "custom_components/mercedes_trips/"
+    stamp = time.gmtime(int(git("log", "-1", "--format=%ct")))[:6]
+    out = ROOT / "mercedes_trips.zip"
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_STORED) as zf:
+        for name in sorted(git("ls-files", folder).splitlines()):
+            info = zipfile.ZipInfo(name.removeprefix(folder), date_time=stamp)
+            info.external_attr = 0o644 << 16
+            zf.writestr(info, (ROOT / name).read_bytes())
+    return out
+
+
 if __name__ == "__main__":
     if len(sys.argv) >= 3 and sys.argv[1] == "bump":
         print(bump(sys.argv[2]))
     elif len(sys.argv) >= 3 and sys.argv[1] == "notes":
         notes(sys.argv[2], "--dry-run" in sys.argv)
+    elif len(sys.argv) == 2 and sys.argv[1] == "package":
+        print(package().name)
     else:
         sys.exit(__doc__)

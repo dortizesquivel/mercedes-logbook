@@ -4,6 +4,9 @@ __pycache__/
 *.db
 .playwright-mcp/
 release-notes.md
+mercedes_trips.zip
+*.sigstore.json
+*.intoto.jsonl
 
 # Tests and tooling
 .venv/

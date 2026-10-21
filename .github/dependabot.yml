@@ -1,10 +1,30 @@
 version: 2
 updates:
-  # The only third-party code in CI is GitHub Actions; one grouped PR a month.
+  # GitHub Actions, pinned to commits; one grouped PR a month.
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: monthly
     groups:
       actions:
+        patterns: ["*"]
+
+  # Leaflet (vendored in the card) and the card's lint and browser test tools. A Leaflet bump fails CI until
+  # node scripts/check-vendor.mjs --write copies the new version into frontend/vendor/.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      npm:
+        patterns: ["*"]
+
+  # The Python test tools, pinned in requirements_test.txt (pytest-homeassistant-custom-component brings
+  # Home Assistant itself). The integration has no Python requirements of its own.
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      pip:
         patterns: ["*"]
