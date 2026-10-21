@@ -96,6 +96,7 @@ async def test_detail(hass: HomeAssistant, trips, hass_client):
         {"end_date": "' OR 1=1 --"},
         {"hour_start": "24"},
         {"hour_start": "-1"},
+        {"hour_start": "10000000000000000000"},  # was an OverflowError in SQLite: a 500
         {"hour_end": "noon"},
     ],
 )
