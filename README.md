@@ -2,6 +2,7 @@
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/integration)
 [![GitHub release](https://img.shields.io/github/v/release/dortizesquivel/mercedes-logbook)](https://github.com/dortizesquivel/mercedes-logbook/releases)
+[![Downloads](https://img.shields.io/github/downloads/dortizesquivel/mercedes-logbook/mercedes_trips.zip?displayAssetName=false&label=downloads)](https://github.com/dortizesquivel/mercedes-logbook/releases)
 [![CI](https://github.com/dortizesquivel/mercedes-logbook/actions/workflows/ci.yml/badge.svg)](https://github.com/dortizesquivel/mercedes-logbook/actions/workflows/ci.yml)
 [![Validate](https://github.com/dortizesquivel/mercedes-logbook/actions/workflows/validate.yml/badge.svg)](https://github.com/dortizesquivel/mercedes-logbook/actions/workflows/validate.yml)
 [![CodeQL](https://github.com/dortizesquivel/mercedes-logbook/actions/workflows/codeql.yml/badge.svg)](https://github.com/dortizesquivel/mercedes-logbook/actions/workflows/codeql.yml)
@@ -365,7 +366,7 @@ gh workflow run release.yml -f bump=patch     # patch | minor | major
 gh workflow run release.yml -f bump=minor -f dry_run=true   # try it without publishing
 ```
 
-It runs the tests, bumps the version in `manifest.json`, adds the commits since the last tag to [`CHANGELOG.md`](CHANGELOG.md), commits, tags and publishes a GitHub release with `mercedes_trips.zip` and its signed build-provenance attestation. HACS offers the new version to every install from there. With `prerelease`, HACS only offers it to users who enable beta versions. Dependabot opens one grouped pull request a month for the GitHub Actions and for the dependencies.
+It runs the tests, bumps the version in `manifest.json`, adds the commits since the last tag to [`CHANGELOG.md`](CHANGELOG.md), commits, tags and publishes a GitHub release with `mercedes_trips.zip` and its signed build-provenance attestation. HACS offers the new version to every install and installs that zip, whose downloads the badge above counts. With `prerelease`, HACS only offers it to users who enable beta versions. Dependabot opens one grouped pull request a month for the GitHub Actions and for the dependencies.
 
 ## Contributing
 
