@@ -45,7 +45,7 @@ async def setup_integration(hass: HomeAssistant, extra_js_urls, aioclient_mock):
     assert await async_setup_component(hass, "http", {})
     set_car(hass)
     hass.states.async_set(RANGE, "300")
-    entry = MockConfigEntry(domain=DOMAIN, title="Mercedes Trips", data=CONFIG, unique_id=DOMAIN)
+    entry = MockConfigEntry(domain=DOMAIN, title="Mercedes Logbook", data=CONFIG, unique_id=DOMAIN)
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()

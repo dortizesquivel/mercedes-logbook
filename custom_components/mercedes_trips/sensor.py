@@ -41,7 +41,7 @@ def _device_info(entry: ConfigEntry) -> DeviceInfo:
         # belongs to the integration that talks to it (mbapi2020).
         _DEVICE_INFO_CACHE[entry.entry_id] = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
-            name="Mercedes Trips",
+            name="Mercedes Logbook",
             entry_type=DeviceEntryType.SERVICE,
         )
     return _DEVICE_INFO_CACHE[entry.entry_id]

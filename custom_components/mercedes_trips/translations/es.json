@@ -2,7 +2,7 @@
   "config": {
     "step": {
       "user": {
-        "title": "Mercedes Trips",
+        "title": "Mercedes Logbook",
         "description": "Registra cada trayecto de tu Mercedes a partir de las entidades de Mercedes me (mbapi2020). Si esa integración está configurada, sus entidades ya vienen seleccionadas.",
         "data": {
           "odometer_entity": "Sensor de odómetro",
@@ -28,14 +28,14 @@
       "entity_not_found": "Entidad no encontrada en Home Assistant"
     },
     "abort": {
-      "already_configured": "Mercedes Trips ya está configurado",
-      "single_instance_allowed": "Mercedes Trips ya está configurado; registra un coche por cada Home Assistant."
+      "already_configured": "Mercedes Logbook ya está configurado",
+      "single_instance_allowed": "Mercedes Logbook ya está configurado; registra un coche por cada Home Assistant."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Mercedes Trips",
+        "title": "Mercedes Logbook",
         "description": "Los cambios se aplican al momento; los trayectos ya registrados conservan sus valores.",
         "data": {
           "odometer_entity": "Sensor de odómetro",

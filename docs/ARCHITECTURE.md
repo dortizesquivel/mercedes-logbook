@@ -1,6 +1,6 @@
 # Architecture
 
-Mercedes Trips has two parts: a Home Assistant integration in Python, which turns the car's state into a logbook of trips, and a dashboard card in JavaScript, which shows them. The integration doesn't talk to Mercedes: it reads the entities of [mbapi2020](https://github.com/ReneNulschDE/mbapi2020), which does.
+Mercedes Logbook has two parts: a Home Assistant integration in Python, which turns the car's state into a logbook of trips, and a dashboard card in JavaScript, which shows them. The integration doesn't talk to Mercedes: it reads the entities of [mbapi2020](https://github.com/ReneNulschDE/mbapi2020), which does.
 
 ```
  Mercedes me ──► mbapi2020 ──► entity states ──► coordinator ──► SQLite (/config/mercedes_trips.db)
@@ -22,7 +22,7 @@ Mercedes Trips has two parts: a Home Assistant integration in Python, which turn
 | `custom_components/mercedes_trips/__init__.py` | Setup. Once per Home Assistant run, registers the API views, serves the card's JS and its `vendor/` files, and injects the card into the frontend with `add_extra_js_url`, with a hash of the file in the URL so browsers pick up a new version. Removes the dashboard resource older versions added. Each config entry gets a coordinator and the sensor platform; changing the options reloads it. |
 | `coordinator.py` | `TripCoordinator`: listens to the odometer, records waypoints every 30 seconds and checks for inactivity every 2 minutes. Starts, extends and closes trips under one lock, keeps the trip in progress in `.storage`, writes finished trips to SQLite, geocodes their start and end, and answers the API's queries. |
 | `http_views.py` | The REST API: `/api/mercedes_trips/trips`, `/trips/{id}` and `/totals`, for signed-in users. Parses the query parameters and runs the queries in the executor. |
-| `sensor.py` | The 7 sensors, on a *Mercedes Trips* service device. They don't poll: the coordinator updates them when a trip starts or closes. |
+| `sensor.py` | The 7 sensors, on a *Mercedes Logbook* service device. They don't poll: the coordinator updates them when a trip starts or closes. |
 | `config_flow.py` | The setup and options form. Pre-selects one car's mbapi2020 entities, found in the entity registry by their unique ID or entity ID and grouped by device; checks the chosen entities exist. One config entry per Home Assistant. |
 | `const.py` | Setting keys, defaults, intervals, file names and Nominatim's URL and user agent. |
 | `translations/en.json`, `es.json` | The form's and the sensors' texts. |
