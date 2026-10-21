@@ -1,5 +1,5 @@
 # Tests and linting, in CI and locally. The integration itself has no Python requirements:
 # Home Assistant provides everything it imports.
 pytest-homeassistant-custom-component==0.13.373  # pins homeassistant==2026.10.2, pytest and pytest-cov
-hypothesis==6.168.5
-ruff==0.16.10
+hypothesis==6.170.1
+ruff==0.17.1
