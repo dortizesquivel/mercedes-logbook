@@ -17,7 +17,7 @@ Fixes go into the latest release. HACS offers it as an update.
 
 ## What the integration can do
 
-Mercedes Trips is a Home Assistant integration (Python, running inside Home Assistant) with a dashboard card (JavaScript, running in the browser of whoever views the dashboard). It doesn't talk to Mercedes: it reads what [mbapi2020](https://github.com/ReneNulschDE/mbapi2020) already put in Home Assistant.
+Mercedes Logbook is a Home Assistant integration (Python, running inside Home Assistant) with a dashboard card (JavaScript, running in the browser of whoever views the dashboard). It doesn't talk to Mercedes: it reads what [mbapi2020](https://github.com/ReneNulschDE/mbapi2020) already put in Home Assistant.
 
 - **Reads** the states of the entities you pick in its settings: the odometer, the GPS tracker and the state of charge. The electric range, if you pick one, is only kept in the settings.
 - **Stores** every trip, with its GPS route and its start and end addresses, in `/config/mercedes_trips.db` (SQLite), and the trip in progress in `/config/.storage/mercedes_trips.active_trip`. This is your car's location history: it goes into Home Assistant backups like the rest of `/config`.

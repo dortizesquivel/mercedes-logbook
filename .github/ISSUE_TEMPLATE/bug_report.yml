@@ -40,8 +40,8 @@ body:
   - type: input
     id: version
     attributes:
-      label: Mercedes Trips version
-      description: In HACS, or under Settings → Devices & services → Mercedes Trips.
+      label: Mercedes Logbook version
+      description: In HACS, or under Settings → Devices & services → Mercedes Logbook.
       placeholder: v1.5.0
     validations:
       required: true

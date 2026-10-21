@@ -177,3 +177,30 @@ def test_frontend_files_exist():
     frontend = Path(mercedes_trips.__file__).parent / "frontend"
     for name in ("mercedes-trips-card.js", "vendor/leaflet.js", "vendor/chakra-petch-600.woff2"):
         assert (frontend / name).is_file(), name
+
+
+@pytest.mark.parametrize(
+    ("title", "renamed"),
+    [("Mercedes Trips", "Mercedes Logbook"), ("Our EQB", "Our EQB")],
+)
+async def test_entries_from_before_the_rename(hass: HomeAssistant, extra_js_urls, aioclient_mock, title, renamed):
+    """Only the old default title follows the new name; the entity IDs stay."""
+    hass.config.components.add("frontend")
+    assert await async_setup_component(hass, "http", {})
+    set_car(hass)
+    entry = MockConfigEntry(domain=DOMAIN, title=title, data=CONFIG, unique_id=DOMAIN, version=1, minor_version=1)
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.LOADED
+    assert (entry.title, entry.minor_version) == (renamed, 2)
+
+
+async def test_entry_from_a_newer_version_is_not_loaded(hass: HomeAssistant, extra_js_urls, aioclient_mock):
+    hass.config.components.add("frontend")
+    assert await async_setup_component(hass, "http", {})
+    set_car(hass)
+    entry = MockConfigEntry(domain=DOMAIN, data=CONFIG, unique_id=DOMAIN, version=2)
+    entry.add_to_hass(hass)
+    assert not await hass.config_entries.async_setup(entry.entry_id)
+    assert entry.state is ConfigEntryState.MIGRATION_ERROR

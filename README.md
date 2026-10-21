@@ -1,4 +1,4 @@
-# Mercedes Trips for Home Assistant
+# Mercedes Logbook for Home Assistant
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/integration)
 [![GitHub release](https://img.shields.io/github/v/release/dortizesquivel/mercedes-logbook)](https://github.com/dortizesquivel/mercedes-logbook/releases)
@@ -32,7 +32,7 @@ It comes with a dashboard card: every trip on a map, quick period filters, a log
 
 - **Home Assistant 2026.3 or newer.**
 - **[HACS](https://hacs.xyz/)**, to install and update it from Home Assistant. Without it, [install it manually](#manual).
-- **[MercedesME 2020](https://github.com/ReneNulschDE/mbapi2020)** (mbapi2020), set up with your Mercedes me account. Mercedes Trips reads the car from it: see [below](#the-mbapi2020-dependency).
+- **[MercedesME 2020](https://github.com/ReneNulschDE/mbapi2020)** (mbapi2020), set up with your Mercedes me account. Mercedes Logbook reads the car from it: see [below](#the-mbapi2020-dependency).
 - **A Mercedes electric or plug-in hybrid** with an active Mercedes me connect subscription.
 - **Your car's usable battery capacity**, to work out the energy of each trip. The [table below](#battery-capacity-by-model) has the usual values.
 
@@ -40,7 +40,7 @@ It comes with a dashboard card: every trip on a map, quick period filters, a log
 
 **This integration reads its data from [mbapi2020](https://github.com/ReneNulschDE/mbapi2020)**, a separate integration that connects your car to Home Assistant through Mercedes me. Install and set it up first.
 
-Mercedes Trips doesn't replace it or talk to Mercedes itself: mbapi2020 shows the car's live state, and Mercedes Trips turns the changes in that state into a logbook of trips with their routes, energy and history. It uses these mbapi2020 entities:
+Mercedes Logbook doesn't replace it or talk to Mercedes itself: mbapi2020 shows the car's live state, and Mercedes Logbook turns the changes in that state into a logbook of trips with their routes, energy and history. It uses these mbapi2020 entities:
 
 | Entity | Example entity ID |
 |---|---|
@@ -60,10 +60,10 @@ To install mbapi2020, which is also in HACS's default list:
 
 ### Via HACS (recommended)
 
-Mercedes Trips is in HACS's default list:
+Mercedes Logbook is in HACS's default list:
 
 1. In Home Assistant, open **HACS** from the sidebar.
-2. Search for **Mercedes Trips**, open it and select **Download**.
+2. Search for **Mercedes Logbook**, open it and select **Download**.
 3. Restart Home Assistant, then set it up: see [Configuration](#configuration).
 
 Or open it in HACS on your own Home Assistant with this button, then select **Download** and restart:
@@ -85,7 +85,7 @@ The zip carries a signed build-provenance attestation, so you can check it was b
 ## Configuration
 
 1. Go to **Settings → Devices & services → + Add integration**.
-2. Search for **Mercedes Trips**.
+2. Search for **Mercedes Logbook**.
 3. Check the form. If mbapi2020 is set up, your car's entities are already selected; with several cars, the first one found is picked, so check it is the right one.
 
 | Field | Description | Default |
@@ -118,7 +118,7 @@ If your Mercedes me account reports the odometer in miles, it is converted to km
 
 ## Dashboard card
 
-Add it from the card picker (**Mercedes Trips**) or in YAML:
+Add it from the card picker (**Mercedes Logbook**) or in YAML:
 
 ```yaml
 type: custom:mercedes-trips-card
@@ -138,15 +138,15 @@ title: My logbook  # optional; defaults to "Trip logbook" / "Cuaderno de ruta"
 
 | Entity | Description |
 |---|---|
-| `sensor.mercedes_trips_distance_this_month` | km driven in the current month |
-| `sensor.mercedes_trips_distance_this_year` | km driven in the current year |
-| `sensor.mercedes_trips_energy_used_this_month` | kWh used in the current month |
-| `sensor.mercedes_trips_average_consumption_this_month` | Average consumption in kWh/100 km (current month) |
-| `sensor.mercedes_trips_total_trips` | Number of trips logged |
-| `sensor.mercedes_trips_last_trip` | Last trip as "start → end", with all its data as attributes |
-| `sensor.mercedes_trips_trip_in_progress` | `active` / `idle`, with the live trip as attributes |
+| `sensor.mercedes_logbook_distance_this_month` | km driven in the current month |
+| `sensor.mercedes_logbook_distance_this_year` | km driven in the current year |
+| `sensor.mercedes_logbook_energy_used_this_month` | kWh used in the current month |
+| `sensor.mercedes_logbook_average_consumption_this_month` | Average consumption in kWh/100 km (current month) |
+| `sensor.mercedes_logbook_total_trips` | Number of trips logged |
+| `sensor.mercedes_logbook_last_trip` | Last trip as "start → end", with all its data as attributes |
+| `sensor.mercedes_logbook_trip_in_progress` | `active` / `idle`, with the live trip as attributes |
 
-Names are shown in your language. Installs from before v1.4.0 keep their original (Spanish) entity IDs, such as `sensor.mercedes_trips_distancia_este_mes`.
+Names are shown in your language. Installs from before v1.6.0, when the integration was called Mercedes Trips, keep their `sensor.mercedes_trips_*` entity IDs, and installs from before v1.4.0 their original Spanish ones, such as `sensor.mercedes_trips_distancia_este_mes`.
 
 ## REST API
 
@@ -251,7 +251,7 @@ Approximate usable capacities; check the spec sheet for your model year, as they
 
 - If you opened the dashboard while Home Assistant was still starting, reload the page once it has started: a page loaded before the integration is up doesn't have the card yet.
 - Otherwise hard-refresh the browser (`Ctrl+Shift+R`, or `Cmd+Shift+R` on a Mac).
-- Check that **Settings → Devices & services → Mercedes Trips** shows the integration as loaded.
+- Check that **Settings → Devices & services → Mercedes Logbook** shows the integration as loaded.
 
 **Energy is not calculated:**
 
@@ -376,4 +376,4 @@ Bug reports, ideas and pull requests are welcome: [CONTRIBUTING.md](CONTRIBUTING
 
 [MIT](LICENSE). The vendored Leaflet is BSD 2-Clause ([licence](custom_components/mercedes_trips/frontend/vendor/LICENSE-leaflet.txt)) and the Chakra Petch font is under the SIL Open Font License 1.1 ([licence](custom_components/mercedes_trips/frontend/vendor/LICENSE-chakra-petch.txt)). Map tiles and addresses come from [OpenStreetMap](https://www.openstreetmap.org/copyright) and its contributors.
 
-Mercedes Trips is an independent project, not affiliated with or endorsed by Mercedes-Benz. Mercedes-Benz and Mercedes me are trademarks of Mercedes-Benz Group AG.
+Mercedes Logbook is an independent project, not affiliated with or endorsed by Mercedes-Benz. Mercedes-Benz and Mercedes me are trademarks of Mercedes-Benz Group AG.

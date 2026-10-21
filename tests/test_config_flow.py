@@ -133,7 +133,7 @@ async def test_valid_form_creates_the_entry(hass: HomeAssistant):
     result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
     result = await hass.config_entries.flow.async_configure(result["flow_id"], CONFIG)
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert result["title"] == "Mercedes Trips"
+    assert result["title"] == "Mercedes Logbook"
     assert result["data"] == CONFIG
     assert result["result"].unique_id == DOMAIN
 

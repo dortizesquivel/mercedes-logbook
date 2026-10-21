@@ -105,6 +105,8 @@ def _validate(hass: HomeAssistant, user_input: dict) -> dict:
 
 class MercedesTripsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
+    # 2: the integration was renamed Mercedes Logbook (see async_migrate_entry).
+    MINOR_VERSION = 2
 
     async def async_step_user(self, user_input=None):
         errors = {}
@@ -114,7 +116,7 @@ class MercedesTripsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if not errors:
                 await self.async_set_unique_id(DOMAIN)
                 self._abort_if_unique_id_configured()
-                return self.async_create_entry(title="Mercedes Trips", data=user_input)
+                return self.async_create_entry(title="Mercedes Logbook", data=user_input)
 
         return self.async_show_form(
             step_id="user",

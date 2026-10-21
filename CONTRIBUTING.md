@@ -4,7 +4,7 @@ Thanks for helping. Bug reports, ideas and pull requests are welcome. Everyone t
 
 ## Reporting
 
-- **Bugs**: open an [issue](https://github.com/dortizesquivel/mercedes-logbook/issues/new/choose) with the bug form. It asks for the versions of Mercedes Trips, Home Assistant and mbapi2020, your car and the logs filtered by `mercedes_trips`. Trips are location history: remove addresses, coordinates, your VIN and your licence plate before you paste anything.
+- **Bugs**: open an [issue](https://github.com/dortizesquivel/mercedes-logbook/issues/new/choose) with the bug form. It asks for the versions of Mercedes Logbook, Home Assistant and mbapi2020, your car and the logs filtered by `mercedes_trips`. Trips are location history: remove addresses, coordinates, your VIN and your licence plate before you paste anything.
 - **Ideas**: propose them, or vote with a 👍 on the ones you want, in [Discussions → Ideas](https://github.com/dortizesquivel/mercedes-logbook/discussions/categories/ideas). Questions go to [Q&A](https://github.com/dortizesquivel/mercedes-logbook/discussions/categories/q-a).
 - **Security problems**: don't open an issue; report them privately as [SECURITY.md](SECURITY.md) explains.
 
