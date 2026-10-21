@@ -2,6 +2,19 @@
 
 Versions before v1.4.0 are summarised from their GitHub release titles; the release pages have the details.
 
+## v1.6.0 - 2026-10-21
+
+- Bump the actions group with 5 updates (#7) (bda0cee)
+- Bump the pip group with 2 updates (#6) (412131f)
+- Bump the npm group with 3 updates (#5) (c818209)
+- Rename the integration Mercedes Logbook, like the repository (#10) (684fe58)
+- Best Practices: proposed answers in .bestpractices.json (#9) (76930b1)
+- HACS installs the release's signed mercedes_trips.zip; a downloads badge counts it (#8) (0c336fc)
+- CI and security: tests, fuzzing, CodeQL, Scorecard, pinned actions and signed releases (#4) (a1b2539)
+- README, issue forms and community docs: code of conduct, contributing, governance, roadmap and architecture (#2) (0d00df1)
+- Landing page on GitHub Pages, with the live card in the hero (#3) (d77f676)
+- CHANGELOG: point at the commits as they are after the history rewrite (540021c)
+
 ## v1.5.0 - 2026-10-06
 
 - Demo and README screenshots use public places in Madrid (8877175)
