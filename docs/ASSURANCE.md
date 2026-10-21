@@ -10,7 +10,7 @@ The integration runs inside Home Assistant with Home Assistant's own rights; the
 2. **No unwanted changes**: the integration changes nothing outside its own database and storage file, except removing the dashboard resource entries older versions added for its own card. It has no services and controls no device.
 3. **Location data stays at home**: trips and routes stay in Home Assistant. The only exceptions are the start and end coordinates of each trip, sent once per place to Nominatim for the address, and the map tiles the browser loads from OpenStreetMap. No telemetry, no other servers.
 4. **Robustness**: malformed or hostile input must not crash the integration, make the API fail with an error or lock up the dashboard.
-5. **Trustworthy releases**: what HACS installs must be the code in this repository, and the release zip must be built by its CI.
+5. **Trustworthy releases**: what HACS installs, the release zip, must be the code in this repository, built by its CI.
 
 ## Threat model and trust boundaries
 

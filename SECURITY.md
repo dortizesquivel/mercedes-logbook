@@ -51,10 +51,10 @@ The [assurance case](docs/ASSURANCE.md) explains in more detail why the integrat
 
 ## Verifying a release
 
-HACS installs the integration from the release's tag. Each release also carries `mercedes_trips.zip`, the integration's folder for installing by hand, with a signed build-provenance attestation: proof that the file was built by the [release workflow](.github/workflows/release.yml) from the tagged commit, not uploaded by hand. The release has it as `mercedes_trips.zip.sigstore.json` (the Sigstore bundle) and `mercedes_trips.zip.intoto.jsonl` (the signed in-toto statement). To check a downloaded copy, with the GitHub CLI:
+Each release carries `mercedes_trips.zip`, the integration's folder, which is what HACS installs (and what you copy when installing by hand). It has a signed build-provenance attestation: proof that the file was built by the [release workflow](.github/workflows/release.yml) from the tagged commit, not uploaded by hand. The release has it as `mercedes_trips.zip.sigstore.json` (the Sigstore bundle) and `mercedes_trips.zip.intoto.jsonl` (the signed in-toto statement). To check a downloaded copy, with the GitHub CLI:
 
 ```bash
 gh attestation verify mercedes_trips.zip --repo dortizesquivel/mercedes-logbook
 ```
 
-The zip holds exactly the files of `custom_components/mercedes_trips/` at the tag, and it's reproducible: checking out the tag and running `python scripts/release.py package` gives a byte for byte identical `mercedes_trips.zip`, so you can compare their SHA-256. Releases before this process (v1.5.0 and older) don't have the zip.
+The zip holds exactly the files of `custom_components/mercedes_trips/` at the tag, and it's reproducible: checking out the tag and running `python scripts/release.py package` gives a byte for byte identical `mercedes_trips.zip`, so you can compare their SHA-256. Releases before this process (v1.5.0 and older) don't have the zip; HACS installs those from the tag's source.
