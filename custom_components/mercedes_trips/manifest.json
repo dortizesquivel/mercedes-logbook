@@ -1,6 +1,6 @@
 {
   "domain": "mercedes_trips",
-  "name": "Mercedes Trips",
+  "name": "Mercedes Logbook",
   "after_dependencies": ["lovelace"],
   "codeowners": ["@dortizesquivel"],
   "config_flow": true,

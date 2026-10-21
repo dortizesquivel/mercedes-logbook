@@ -72,7 +72,7 @@ class MercedesTripsCardView(HomeAssistantView):
         except (OSError, UnicodeDecodeError) as exc:
             # The details go to the log only: this view needs no login, and
             # the error would show the install's paths to anyone.
-            _LOGGER.error("Mercedes Trips: could not serve card JS: %s", exc)
+            _LOGGER.error("Mercedes Logbook: could not serve card JS: %s", exc)
             return web.Response(status=500, text="Could not read the card's script")
 
 
@@ -97,7 +97,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     # reloaded ("Configuration error" on the card) — so this happens here,
     # before any config entry work, not after it.
     add_extra_js_url(hass, FRONTEND_VERSIONED_URL)
-    _LOGGER.info("Mercedes Trips: card JS injected → %s", FRONTEND_VERSIONED_URL)
+    _LOGGER.info("Mercedes Logbook: card JS injected → %s", FRONTEND_VERSIONED_URL)
 
     # Older versions could also register the card as a dashboard
     # resource; with the injection above that would load it twice per page.
@@ -112,6 +112,17 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     return True
 
 
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Entry 1.1 → 1.2: the integration was called Mercedes Trips until
+    v1.6.0. An entry that still has that default title gets the new name; one
+    the user renamed keeps theirs. Entity IDs don't change."""
+    if entry.version > 1:
+        return False  # from a newer version of this integration
+    if entry.minor_version < 2:
+        title = "Mercedes Logbook" if entry.title == "Mercedes Trips" else entry.title
+        hass.config_entries.async_update_entry(entry, title=title, minor_version=2)
+    return True
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
 
@@ -124,7 +135,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 
-    _LOGGER.info("Mercedes Trips: loaded — card at %s", FRONTEND_VERSIONED_URL)
+    _LOGGER.info("Mercedes Logbook: loaded — card at %s", FRONTEND_VERSIONED_URL)
     return True
 
 
@@ -144,9 +155,9 @@ async def _async_remove_stale_resources(hass: HomeAssistant) -> None:
             url = item.get("url", "")
             if url == FRONTEND_URL or url.startswith(FRONTEND_URL + "?"):
                 await collection.async_delete_item(item["id"])
-                _LOGGER.info("Mercedes Trips: removed old dashboard resource → %s", url)
+                _LOGGER.info("Mercedes Logbook: removed old dashboard resource → %s", url)
     except Exception as exc:  # noqa: BLE001 — housekeeping must never break setup
-        _LOGGER.debug("Mercedes Trips: could not check dashboard resources (%s)", exc)
+        _LOGGER.debug("Mercedes Logbook: could not check dashboard resources (%s)", exc)
 
 
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:

@@ -110,7 +110,7 @@ class TripCoordinator:
         self._last_odometer = self._get_odometer()
 
         if self._active_trip:
-            _LOGGER.info("Mercedes Trips: recovered in-progress trip from storage")
+            _LOGGER.info("Mercedes Logbook: recovered in-progress trip from storage")
             await self._check_stale_trip()
 
         odometer_entity = self._config[CONF_ODOMETER_ENTITY]
@@ -418,7 +418,7 @@ class TripCoordinator:
         except (TimeoutError, aiohttp.ClientError, ValueError) as exc:
             # Not cached: a network blip mustn't pin this place to bare
             # coordinates forever. The next trip here will try again.
-            _LOGGER.warning("Mercedes Trips: geocoding failed for %s,%s: %s", lat, lon, exc)
+            _LOGGER.warning("Mercedes Logbook: geocoding failed for %s,%s: %s", lat, lon, exc)
             return f"{lat:.4f},{lon:.4f}"
 
         parts = data.get("address", {})
@@ -486,7 +486,7 @@ class TripCoordinator:
         prev_odo = self._last_odometer
         if prev_odo is not None and new_odo < prev_odo - 0.05:
             # Odometers don't run backwards; keep the baseline we trust.
-            _LOGGER.debug("Mercedes Trips: ignoring odometer going back %.1f → %.1f", prev_odo, new_odo)
+            _LOGGER.debug("Mercedes Logbook: ignoring odometer going back %.1f → %.1f", prev_odo, new_odo)
             return
         self._last_odometer = new_odo
 
@@ -511,7 +511,7 @@ class TripCoordinator:
                 self._active_trip["stable_odometer"] = new_odo
                 self._active_trip["last_movement"] = now_iso
                 await self._store.async_save(self._active_trip)
-                _LOGGER.debug("Mercedes Trips: movement detected, odo=%.1f km", new_odo)
+                _LOGGER.debug("Mercedes Logbook: movement detected, odo=%.1f km", new_odo)
 
     async def _start_trip(self, odometer: float, current_odometer: float, now_iso: str) -> None:
         gps = self._get_gps()
@@ -536,7 +536,7 @@ class TripCoordinator:
         # "Trip in progress" goes active now, not only once the trip ends.
         self._notify_sensors()
         _LOGGER.info(
-            "Mercedes Trips: trip started — odo=%.1f km, SoC=%s%%",
+            "Mercedes Logbook: trip started — odo=%.1f km, SoC=%s%%",
             odometer,
             soc,
         )
@@ -606,7 +606,7 @@ class TripCoordinator:
             return
 
         if (dt_util.now() - last_dt).total_seconds() > 7200:
-            _LOGGER.info("Mercedes Trips: discarding stale recovered trip (>2h inactive)")
+            _LOGGER.info("Mercedes Logbook: discarding stale recovered trip (>2h inactive)")
             self._active_trip = None
             await self._store.async_save(None)
 
@@ -628,7 +628,7 @@ class TripCoordinator:
         min_dist = self._config.get(CONF_MIN_TRIP_DISTANCE, 0.5)
         if distance_km is not None and distance_km < min_dist:
             _LOGGER.info(
-                "Mercedes Trips: discarding trip (%.2f km < %.1f km minimum)",
+                "Mercedes Logbook: discarding trip (%.2f km < %.1f km minimum)",
                 distance_km, min_dist,
             )
             self._active_trip = None
@@ -692,7 +692,7 @@ class TripCoordinator:
         await self._store.async_save(None)
 
         _LOGGER.info(
-            "Mercedes Trips: trip saved (id=%d) — %.1f km, %.1f kWh, %s → %s",
+            "Mercedes Logbook: trip saved (id=%d) — %.1f km, %.1f kWh, %s → %s",
             trip_id,
             distance_km or 0,
             kwh_used or 0,

@@ -1,5 +1,5 @@
 /**
- * Mercedes Trips Card — Custom Lovelace card
+ * Mercedes Logbook Card — Custom Lovelace card
  * Multi-trip Leaflet map, quick period filters, and stats for the selected
  * period compared with the one right before it. UI in English or Spanish,
  * following the Home Assistant user's language.
@@ -870,7 +870,7 @@ class MercedesTripsCard extends HTMLElement {
       trips = data.trips || [];
       activeTrip = data.active_trip || null;
     } catch (e) {
-      console.error("Mercedes Trips card: fetch error", e);
+      console.error("Mercedes Logbook card: fetch error", e);
     }
 
     // A newer filter already superseded this one. Checked before touching
@@ -896,7 +896,7 @@ class MercedesTripsCard extends HTMLElement {
     try {
       this._drawMap();
     } catch (e) {
-      console.error("Mercedes Trips card: map render error", e);
+      console.error("Mercedes Logbook card: map render error", e);
     }
     this._renderList();
 
@@ -920,7 +920,7 @@ class MercedesTripsCard extends HTMLElement {
       this._prevTotals = totals;
       this._renderInstrument();
     } catch (e) {
-      console.error("Mercedes Trips card: previous-period fetch error", e);
+      console.error("Mercedes Logbook card: previous-period fetch error", e);
     }
   }
 
@@ -1287,7 +1287,7 @@ window.customCards = window.customCards || [];
 if (!window.customCards.some(c => c.type === "mercedes-trips-card")) {
   window.customCards.push({
     type: "mercedes-trips-card",
-    name: "Mercedes Trips",
+    name: "Mercedes Logbook",
     description: _t("cardDescription"),
     preview: false,
   });

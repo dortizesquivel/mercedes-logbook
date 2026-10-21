@@ -72,7 +72,7 @@ def saved_trips(hass: HomeAssistant) -> list[dict]:
 async def test_trip_starts_on_real_movement(hass: HomeAssistant, setup_integration):
     coordinator = coordinator_of(hass, setup_integration)
     assert coordinator.active_trip is None
-    assert hass.states.get("sensor.mercedes_trips_trip_in_progress").state == "idle"
+    assert hass.states.get("sensor.mercedes_logbook_trip_in_progress").state == "idle"
 
     await move(hass, odometer=27310.03)  # jitter, not movement
     assert coordinator.active_trip is None
@@ -85,7 +85,7 @@ async def test_trip_starts_on_real_movement(hass: HomeAssistant, setup_integrati
     assert (trip["start_lat"], trip["start_lon"]) == SOL
     assert trip["waypoints"][0][:2] == list(SOL)
     assert trip["waypoints"][0][3] == 90  # heading
-    assert hass.states.get("sensor.mercedes_trips_trip_in_progress").state == "active"
+    assert hass.states.get("sensor.mercedes_logbook_trip_in_progress").state == "active"
 
 
 async def test_first_reading_is_only_a_baseline(hass: HomeAssistant, extra_js_urls, aioclient_mock):
@@ -208,10 +208,10 @@ async def test_trip_closes_after_the_timeout(
     waypoints = json.loads(trip["waypoints"])
     assert [w[:2] for w in waypoints] == [list(SOL), list(RETIRO)]  # Retiro isn't repeated at the end
 
-    assert hass.states.get("sensor.mercedes_trips_trip_in_progress").state == "idle"
-    assert hass.states.get("sensor.mercedes_trips_total_trips").state == "1"
-    assert hass.states.get("sensor.mercedes_trips_distance_this_month").state == "10.0"
-    last = hass.states.get("sensor.mercedes_trips_last_trip")
+    assert hass.states.get("sensor.mercedes_logbook_trip_in_progress").state == "idle"
+    assert hass.states.get("sensor.mercedes_logbook_total_trips").state == "1"
+    assert hass.states.get("sensor.mercedes_logbook_distance_this_month").state == "10.0"
+    last = hass.states.get("sensor.mercedes_logbook_last_trip")
     assert last.state == "Puerta del Sol, Sol, Madrid → Plaza de la Independencia, 1, Retiro, Madrid"
     assert "waypoints" not in last.attributes
     assert last.attributes["distance_km"] == 10
@@ -253,7 +253,7 @@ async def test_trip_without_gps_is_saved_without_addresses(hass: HomeAssistant, 
     assert trip["start_address"] == ""
     assert trip["end_address"] == ""
     assert json.loads(trip["waypoints"]) == []
-    assert hass.states.get("sensor.mercedes_trips_last_trip").state == " → "
+    assert hass.states.get("sensor.mercedes_logbook_last_trip").state == " → "
 
 
 async def test_long_addresses_fit_in_a_state(hass: HomeAssistant, setup_integration, freezer, aioclient_mock):
@@ -261,7 +261,7 @@ async def test_long_addresses_fit_in_a_state(hass: HomeAssistant, setup_integrat
     await move(hass, odometer=27312)
     await move(hass, odometer=27320, position=RETIRO)
     await advance(hass, freezer, minutes=10)
-    assert len(hass.states.get("sensor.mercedes_trips_last_trip").state) == 255
+    assert len(hass.states.get("sensor.mercedes_logbook_last_trip").state) == 255
 
 
 # ── Recovery after a restart ─────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 {
   "name": "mercedes-logbook",
-  "description": "Tooling for the Mercedes Trips card: the vendored Leaflet, linting and browser tests",
+  "description": "Tooling for the Mercedes Logbook card: the vendored Leaflet, linting and browser tests",
   "type": "module",
   "private": true,
   "license": "MIT",
