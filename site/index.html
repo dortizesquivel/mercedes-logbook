@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mercedes Trips for Home Assistant</title>
+<meta name="description" content="A Home Assistant integration that logs every trip of your Mercedes electric or plug-in hybrid: start and end, distance, energy used, the route and the addresses, on a map in your dashboard.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://dortizesquivel.github.io/mercedes-logbook/">
+<meta property="og:title" content="Mercedes Trips for Home Assistant">
+<meta property="og:description" content="Every drive of your Mercedes EV or plug-in hybrid, logged by Home Assistant: distance, energy, route and addresses, on a map in your dashboard.">
+<meta property="og:image" content="https://dortizesquivel.github.io/mercedes-logbook/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#edf2f0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1d2130" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<!-- The card's own display face, served from the integration's files: no font requests to third parties. -->
+<link rel="preload" href="custom_components/mercedes_trips/frontend/vendor/chakra-petch-700.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+  @font-face {
+    font-family: "Chakra Petch"; font-style: normal; font-weight: 600; font-display: swap;
+    src: url("custom_components/mercedes_trips/frontend/vendor/chakra-petch-600.woff2") format("woff2");
+  }
+  @font-face {
+    font-family: "Chakra Petch"; font-style: normal; font-weight: 700; font-display: swap;
+    src: url("custom_components/mercedes_trips/frontend/vendor/chakra-petch-700.woff2") format("woff2");
+  }
+
+  :root {
+    color-scheme: light dark;
+    --paper: #edf2f0;
+    --surface: #ffffff;
+    --ink: #15232b;
+    --ink-soft: #4b5c64;
+    --line: #c8d5d1;
+    --route: #007a6f;        /* links, buttons and text in the route's teal */
+    --route-line: #00b3a4;   /* the route itself: rails and dots */
+    --on-route: #ffffff;
+    --pin: #ffb020;
+    --code-bg: #15232b;
+    --code-ink: #e3ecea;
+    --shadow: 0 1px 2px rgba(21, 35, 43, 0.08), 0 22px 50px -24px rgba(21, 35, 43, 0.4);
+    --display: "Chakra Petch", system-ui, sans-serif;
+    --text: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --measure: 64ch;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #1d2130;
+      --surface: #262b3d;
+      --ink: #e8eaf0;
+      --ink-soft: #a6acbe;
+      --line: #3a4157;
+      --route: #3fd9c9;
+      --route-line: #00c2b2;
+      --on-route: #0f2422;
+      --code-bg: #141824;
+      --code-ink: #e3ecea;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 22px 50px -24px rgba(0, 0, 0, 0.7);
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  body { margin: 0; background: var(--paper); color: var(--ink); font: 400 1.0625rem/1.6 var(--text); }
+  img { max-width: 100%; height: auto; display: block; }
+  a { color: var(--route); text-underline-offset: 0.2em; }
+  a:focus-visible, button:focus-visible, iframe:focus-visible { outline: 3px solid var(--route); outline-offset: 3px; border-radius: 4px; }
+  h1, h2, h3 { font-family: var(--display); font-weight: 700; line-height: 1.1; margin: 0; }
+  h1 { font-size: clamp(2.4rem, 4.4vw, 3.6rem); letter-spacing: -0.015em; text-wrap: balance; }
+  h2 { font-size: clamp(1.75rem, 3vw, 2.4rem); letter-spacing: -0.01em; text-wrap: balance; }
+  h3 { font-size: 1.2rem; font-weight: 600; }
+  p { margin: 0; max-width: var(--measure); }
+  code { font-size: 0.92em; }
+  .wrap { width: min(1180px, 100% - 2rem); margin-inline: auto; }
+
+  /* Header */
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding-block: 1.1rem; }
+  .brand { display: flex; align-items: center; gap: 0.55rem; color: var(--ink); text-decoration: none; font: 700 1.2rem/1 var(--display); }
+  .top nav { display: flex; gap: 1.4rem; font-weight: 600; }
+  .top nav a { color: var(--ink); text-decoration: none; }
+  .top nav a:hover { color: var(--route); }
+
+  /* Hero: the card itself, live, next to what it is */
+  .hero { padding-block: 2.5rem 5rem; }
+  .hero-grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 3.5rem; align-items: start; }
+  .hero-copy { position: sticky; top: 2.5rem; padding-top: 1rem; }
+  .lede { margin-top: 1.4rem; font-size: 1.2rem; color: var(--ink-soft); }
+  .needs { margin-top: 1.2rem; font-size: 0.98rem; color: var(--ink-soft); }
+  .actions { display: flex; flex-wrap: wrap; gap: 0.8rem; margin-top: 2rem; }
+  .button { display: inline-flex; align-items: center; min-height: 48px; padding: 0 1.35rem; border-radius: 999px; font-weight: 600; text-decoration: none; border: 2px solid var(--route); }
+  .button.primary { background: var(--route); color: var(--on-route); }
+  .button.primary:hover { filter: brightness(1.08); }
+  .button.secondary { color: var(--route); }
+  .button.secondary:hover { background: color-mix(in srgb, var(--route) 9%, transparent); }
+  .demo { margin: 0; }
+  .demo .frame { border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; }
+  .demo iframe { display: block; width: 100%; height: 1000px; border: 0; background: transparent; }
+  .demo figcaption { margin-top: 0.9rem; color: var(--ink-soft); font-size: 0.95rem; }
+
+  /* Sections */
+  section { padding-block: 5rem; border-top: 1px solid var(--line); }
+  .intro { margin-top: 0.9rem; color: var(--ink-soft); font-size: 1.1rem; }
+
+  /* One trip, taken apart: the card's own rail (filled start, hollow end) at full size */
+  .anatomy { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 3.5rem; align-items: start; margin-top: 2.5rem; }
+  .entry { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: clamp(1.25rem, 3.2vw, 2.4rem); }
+  .leg { display: grid; grid-template-columns: 22px auto minmax(0, 1fr); column-gap: 1rem; row-gap: 1.6rem; align-items: baseline; font-size: clamp(1.1rem, 2.1vw, 1.35rem); line-height: 1.3; }
+  .leg .rail { grid-row: 1 / 3; align-self: stretch; position: relative; }
+  .leg .rail::before { content: ""; position: absolute; left: 50%; top: 0.65em; bottom: calc(0.65em + 9px); width: 4px; transform: translateX(-50%); background: var(--route-line); opacity: 0.5; }
+  .leg .rail i { position: absolute; left: 50%; width: 18px; height: 18px; border-radius: 50%; transform: translate(-50%, -50%); box-sizing: border-box; }
+  .leg .rail .from { top: 0.65em; background: var(--route-line); }
+  .leg .rail .to { top: calc(100% - 0.65em); border: 4px solid var(--route-line); }
+  .leg time { font: 600 1em/1.3 var(--display); font-variant-numeric: tabular-nums; color: var(--ink-soft); }
+  .leg .town { color: var(--ink-soft); }
+  .readout { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.5rem 1.5rem; margin: 2.2rem 0 0; padding-top: 1.8rem; border-top: 1px dashed var(--line); }
+  .readout dt { font-size: 0.92rem; color: var(--ink-soft); }
+  .readout dd { margin: 0.2rem 0 0; font: 700 clamp(1.7rem, 3.4vw, 2.4rem)/1.05 var(--display); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .readout dd span { font: 600 0.46em/1 var(--text); color: var(--route); margin-left: 0.25em; }
+  .readout .odometer { grid-column: 1 / -1; }
+  .readout .odometer dd { font-size: clamp(1.2rem, 2.2vw, 1.5rem); }
+  .entry figcaption { margin-top: 1.6rem; font-size: 0.92rem; color: var(--ink-soft); }
+  .notes { display: grid; gap: 1.2rem; }
+  .notes p { color: var(--ink-soft); }
+  .notes strong { color: var(--ink); }
+
+  /* What it needs */
+  .needs-grid { display: grid; grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); gap: 3.5rem; align-items: start; }
+  .needs-grid ul { margin: 0; padding-left: 1.2rem; display: grid; gap: 0.6rem; }
+
+  /* Features */
+  .features-grid { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 3.5rem; align-items: start; margin-top: 2.5rem; }
+  .features { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2rem 2.5rem; }
+  .features p { margin-top: 0.35rem; color: var(--ink-soft); }
+  .themes { margin: 0; }
+  .themes .pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+  .themes img { border-radius: 12px; border: 1px solid var(--line); }
+  .themes figcaption { margin-top: 0.8rem; font-size: 0.95rem; color: var(--ink-soft); }
+  .more { margin-top: 3rem; }
+
+  /* Install: the steps as an itinerary, same rail as a trip */
+  .itinerary { list-style: none; padding: 0; margin: 2.5rem 0 0; max-width: 780px; }
+  .itinerary li { position: relative; display: grid; grid-template-columns: 2.6rem minmax(0, 1fr); gap: 1.3rem; padding-bottom: 2.4rem; }
+  .itinerary li:last-child { padding-bottom: 0; }
+  .itinerary li::before { content: ""; position: absolute; left: calc(1.3rem - 2px); top: 2.6rem; bottom: 0; width: 4px; background: var(--route-line); opacity: 0.5; }
+  .itinerary li:last-child::before { display: none; }
+  .itinerary .stop { width: 2.6rem; height: 2.6rem; border-radius: 50%; display: grid; place-items: center; font: 700 1.05rem/1 var(--display); color: var(--ink); background: var(--paper); border: 4px solid var(--route-line); }
+  .itinerary li:first-child .stop { background: var(--route-line); color: var(--on-route); }
+  .itinerary h3 { padding-top: 0.55rem; margin-bottom: 0.45rem; }
+  .itinerary p + p, .itinerary pre + p { margin-top: 0.7rem; }
+  pre { margin: 0.8rem 0 0; padding: 1rem 1.2rem; background: var(--code-bg); color: var(--code-ink); border-radius: 10px; overflow-x: auto; font-size: 0.92rem; line-height: 1.5; }
+
+  /* Privacy and trust */
+  .split { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 3.5rem; align-items: start; }
+  .split ul { margin: 0; padding-left: 1.2rem; display: grid; gap: 0.8rem; }
+  .split .after { margin-top: 1.4rem; }
+  .badges { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1.4rem; }
+  .badges img { height: 20px; width: auto; }
+
+  footer { padding-block: 2.5rem 3rem; color: var(--ink-soft); border-top: 1px solid var(--line); font-size: 0.95rem; }
+  footer p { max-width: none; }
+  footer p + p { margin-top: 0.5rem; }
+
+  @media (max-width: 900px) {
+    .hero-grid, .anatomy, .needs-grid, .features-grid, .split { grid-template-columns: minmax(0, 1fr); gap: 2.5rem; }
+    .hero-copy { position: static; padding-top: 0; }
+    .top nav { gap: 1rem; font-size: 0.95rem; }
+  }
+  @media (max-width: 560px) {
+    .top nav a.optional { display: none; }
+    section { padding-block: 3.5rem; }
+    .hero { padding-block: 1.5rem 3.5rem; }
+    .features { grid-template-columns: minmax(0, 1fr); }
+    .readout { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .leg { column-gap: 0.75rem; }
+  }
+</style>
+</head>
+<body>
+<header class="wrap top">
+  <a class="brand" href="./">
+    <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><circle cx="6.5" cy="21.5" r="3.4" fill="none" stroke="#00b3a4" stroke-width="2.6"/><path d="M9.6 19.9 C 13 17.6 19.6 19.4 20.4 14.6" fill="none" stroke="#00b3a4" stroke-width="2.6" stroke-linecap="round"/><path d="M20.4 15.6 C 16.9 11.7 15 9.9 15 7.5 A5.4 5.4 0 0 1 25.8 7.5 C 25.8 9.9 23.9 11.7 20.4 15.6 Z" fill="#ffb020"/><circle cx="20.4" cy="7.5" r="2.1" fill="#fff"/></svg>
+    Mercedes Trips
+  </a>
+  <nav aria-label="Main">
+    <a class="optional" href="#install">Install</a>
+    <a class="optional" href="#privacy">Privacy</a>
+    <a href="https://github.com/dortizesquivel/mercedes-logbook#readme">Docs</a>
+    <a href="https://github.com/dortizesquivel/mercedes-logbook">GitHub</a>
+  </nav>
+</header>
+
+<main>
+  <div class="hero">
+    <div class="wrap hero-grid">
+      <div class="hero-copy">
+        <h1>Every drive, logged by Home Assistant.</h1>
+        <p class="lede">Mercedes Trips records each trip of your Mercedes electric or plug-in hybrid: when and where it started and ended, how far you went, the energy it used and the route. It keeps them in a local database and shows them on a map in your dashboard.</p>
+        <div class="actions">
+          <a class="button primary" href="https://my.home-assistant.io/redirect/hacs_repository/?owner=dortizesquivel&amp;repository=mercedes-logbook&amp;category=integration">Open in HACS</a>
+          <a class="button secondary" href="https://github.com/dortizesquivel/mercedes-logbook#readme">Read the docs</a>
+        </div>
+        <p class="needs">It reads your car through <a href="#needs">mbapi2020</a>, so set that up first.</p>
+      </div>
+      <figure class="demo">
+        <div class="frame">
+          <iframe id="demo" title="Live demo of the Mercedes Trips card, with sample trips around Madrid" loading="eager"></iframe>
+        </div>
+        <figcaption>The card itself, running here with sample trips between public places in Madrid. Pick a period, then open a trip in the list or on the map. <a href="demo/?lang=en">Open the demo on its own page</a>.</figcaption>
+        <noscript><p>The live demo needs JavaScript. The <a href="https://github.com/dortizesquivel/mercedes-logbook#readme">README</a> has screenshots of the card.</p></noscript>
+      </figure>
+    </div>
+  </div>
+
+  <section id="trip" class="wrap">
+    <h2>What each trip records</h2>
+    <p class="intro">It watches your car's odometer, GPS and state of charge, and turns their changes into trips like this one.</p>
+    <div class="anatomy">
+      <figure class="entry">
+        <div class="leg">
+          <span class="rail" aria-hidden="true"><i class="from"></i><i class="to"></i></span>
+          <time>08:39</time><span>Plaza de Cervantes<span class="town">, Alcalá de Henares</span></span>
+          <time>09:20</time><span>Plaza de la Independencia 1<span class="town">, Madrid</span></span>
+        </div>
+        <dl class="readout">
+          <div><dt>Distance</dt><dd>34<span>km</span></dd></div>
+          <div><dt>Energy</dt><dd>6.3<span>kWh</span></dd></div>
+          <div><dt>Consumption</dt><dd>18.5<span>kWh/100 km</span></dd></div>
+          <div><dt>Duration</dt><dd>41<span>min</span></dd></div>
+          <div><dt>Battery used</dt><dd>9<span>%</span></dd></div>
+          <div class="odometer"><dt>Odometer</dt><dd>27,330 → 27,364<span>km</span></dd></div>
+        </dl>
+        <figcaption>One trip from the demo, with everything the logbook keeps about it.</figcaption>
+      </figure>
+      <div class="notes">
+        <p><strong>Start and end.</strong> A trip starts when the odometer moves and ends after 8 minutes without it changing, so a stop at the shops splits a drive in two. You can change the timeout.</p>
+        <p><strong>Distance</strong> is the odometer at the end minus at the start. Trips shorter than 0.5 km are dropped as noise.</p>
+        <p><strong>Energy</strong> is the drop in state of charge times your battery's usable capacity, which you enter once. Consumption follows from it.</p>
+        <p><strong>Route.</strong> A GPS point every 30 seconds while the car moves.</p>
+        <p><strong>Addresses</strong> for both ends come from OpenStreetMap's Nominatim, looked up once per place.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="needs" class="wrap needs-grid">
+    <div>
+      <h2>It reads your car through mbapi2020</h2>
+      <p class="intro">Mercedes Trips doesn't connect to Mercedes itself. <a href="https://github.com/ReneNulschDE/mbapi2020">mbapi2020</a> links Home Assistant to your Mercedes me account and shows the car's live state; Mercedes Trips turns the changes in that state into a logbook.</p>
+    </div>
+    <div>
+      <h3>You need</h3>
+      <ul style="margin-top: 0.8rem">
+        <li>Home Assistant 2026.3 or newer, with <a href="https://hacs.xyz/">HACS</a>.</li>
+        <li>mbapi2020, listed in HACS as <strong>MercedesME 2020</strong>, signed in to your Mercedes me account.</li>
+        <li>A Mercedes electric car or plug-in hybrid with an active Mercedes me connect subscription.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="features" class="wrap">
+    <h2>In your dashboard</h2>
+    <div class="features-grid">
+      <ul class="features">
+        <li>
+          <h3>Every trip on the map</h3>
+          <p>Each in its own colour, on OpenStreetMap. Open one and the others step back.</p>
+        </li>
+        <li>
+          <h3>Quick periods</h3>
+          <p>Today, yesterday, 7 days, this month, last month or this year. Or your own dates and hours, like only the trips that started after 18:00.</p>
+        </li>
+        <li>
+          <h3>Compared with the period before</h3>
+          <p>Distance, trips, energy and average consumption against the same number of days just before. Lower consumption shows in green.</p>
+        </li>
+        <li>
+          <h3>A logbook by day</h3>
+          <p>Start and end time and street, km and kWh. Open a trip for the full addresses, duration, consumption, battery used and odometer.</p>
+        </li>
+        <li>
+          <h3>Seven sensors</h3>
+          <p>Distance this month and this year, energy this month, average consumption, total trips, the last trip and the trip in progress, for your automations.</p>
+        </li>
+        <li>
+          <h3>Your data, queryable</h3>
+          <p>A local SQLite database and a small REST API, for your own reports.</p>
+        </li>
+      </ul>
+      <figure class="themes">
+        <div class="pair">
+          <img src="docs/card-light.png" width="640" height="1000" alt="The card in a light theme, showing the last 7 days" loading="lazy">
+          <img src="docs/card-dark.png" width="640" height="976" alt="The card in a dark theme, with one of today's trips opened" loading="lazy">
+        </div>
+        <figcaption>It follows your Home Assistant theme, light or dark, and each user's language: English or Spanish, with their date, number and clock formats.</figcaption>
+      </figure>
+    </div>
+    <p class="more">What should it log next? <a href="https://github.com/dortizesquivel/mercedes-logbook/discussions/categories/ideas">Vote on the ideas or propose yours</a>, <a href="https://github.com/dortizesquivel/mercedes-logbook/discussions/categories/show-and-tell">show how you use it</a>, or <a href="https://github.com/dortizesquivel/mercedes-logbook/discussions/categories/q-a">ask a question</a>.</p>
+  </section>
+
+  <section id="install" class="wrap">
+    <h2>Install it</h2>
+    <ol class="itinerary">
+      <li>
+        <span class="stop" aria-hidden="true">1</span>
+        <div>
+          <h3>Set up mbapi2020</h3>
+          <p>In HACS, search for <strong>MercedesME 2020</strong>, download it and restart Home Assistant. Then add the <strong>Mercedes me API</strong> integration in Settings → Devices &amp; services and sign in with your Mercedes me account.</p>
+        </div>
+      </li>
+      <li>
+        <span class="stop" aria-hidden="true">2</span>
+        <div>
+          <h3>Download Mercedes Trips</h3>
+          <p>In HACS, search for <strong>Mercedes Trips</strong>, download it and restart Home Assistant. Or <a href="https://my.home-assistant.io/redirect/hacs_repository/?owner=dortizesquivel&amp;repository=mercedes-logbook&amp;category=integration">open it in HACS</a> straight away.</p>
+        </div>
+      </li>
+      <li>
+        <span class="stop" aria-hidden="true">3</span>
+        <div>
+          <h3>Add the integration</h3>
+          <p>In Settings → Devices &amp; services, choose Add integration and search for <strong>Mercedes Trips</strong>. Your car's entities are already filled in. Enter your battery's usable capacity: 66.5 kWh on an EQA or EQB, for example; the <a href="https://github.com/dortizesquivel/mercedes-logbook#battery-capacity-by-model">README has a table</a>.</p>
+        </div>
+      </li>
+      <li>
+        <span class="stop" aria-hidden="true">4</span>
+        <div>
+          <h3>Add the card to a dashboard</h3>
+          <p>Edit a dashboard, choose Add card and search for Mercedes Trips, or paste this:</p>
+          <pre><code>type: custom:mercedes-trips-card</code></pre>
+          <p>Your next drive is the first trip in the logbook.</p>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <section id="privacy" class="wrap split">
+    <div>
+      <h2>What leaves your Home Assistant</h2>
+      <p class="intro">Your trips stay at home, in <code>/config/mercedes_trips.db</code>, which the recorder never purges. Two things go out.</p>
+    </div>
+    <div>
+      <ul>
+        <li>The start and end coordinates of each trip, to OpenStreetMap's <a href="https://nominatim.org/">Nominatim</a>, to look up the addresses. Once per place: after that the address comes from a local cache. No API key and no account.</li>
+        <li>Requests for map tiles to OpenStreetMap, when someone opens the card.</li>
+      </ul>
+      <p class="after">Nothing else: no telemetry, no account and no CDN. Leaflet and the card's font ship with the integration. Anyone who can sign in to your Home Assistant can open the logbook, so it is as private as your Home Assistant is.</p>
+    </div>
+  </section>
+
+  <section id="trust" class="wrap split">
+    <div>
+      <h2>Open and checked</h2>
+      <p class="intro">MIT licensed, with the source, the tests and the release workflow in the open.</p>
+      <div class="badges">
+        <a href="https://scorecard.dev/viewer/?uri=github.com/dortizesquivel/mercedes-logbook"><img src="https://api.scorecard.dev/projects/github.com/dortizesquivel/mercedes-logbook/badge" alt="OpenSSF Scorecard"></a>
+        <a href="https://github.com/dortizesquivel/mercedes-logbook/actions/workflows/codeql.yml"><img src="https://github.com/dortizesquivel/mercedes-logbook/actions/workflows/codeql.yml/badge.svg" alt="CodeQL"></a>
+        <a href="https://github.com/dortizesquivel/mercedes-logbook/actions/workflows/validate.yml"><img src="https://github.com/dortizesquivel/mercedes-logbook/actions/workflows/validate.yml/badge.svg" alt="HACS and hassfest validation"></a>
+      </div>
+    </div>
+    <ul>
+      <li>Every change runs CodeQL, the Python and browser tests, and the HACS and Home Assistant validation before it can merge.</li>
+      <li>Every release is built by GitHub Actions with a signed build-provenance attestation, so you can check where your copy came from. <a href="https://github.com/dortizesquivel/mercedes-logbook/blob/main/SECURITY.md">SECURITY.md</a> explains how.</li>
+      <li>The <a href="https://github.com/dortizesquivel/mercedes-logbook/blob/main/docs/ASSURANCE.md">assurance case</a> sets out what the integration must protect, where untrusted data comes in and how each risk is handled.</li>
+      <li>Found a security problem? <a href="https://github.com/dortizesquivel/mercedes-logbook/security/advisories/new">Report it privately</a>.</li>
+    </ul>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>Mercedes Trips, MIT licence. Maps by Leaflet, map data © OpenStreetMap contributors. The demo uses sample trips between public places in Madrid. <a href="https://github.com/dortizesquivel/mercedes-logbook">Source on GitHub</a>.</p>
+    <p>Not affiliated with or endorsed by Mercedes-Benz. Mercedes-Benz and Mercedes me are trademarks of Mercedes-Benz Group AG.</p>
+    <p>This page counts visits with <a href="https://www.goatcounter.com/">GoatCounter</a>, without cookies or personal data. The integration sends no telemetry.</p>
+  </div>
+</footer>
+<script>
+  // The demo follows this page's light or dark scheme, and the frame grows with the card (same origin).
+  (() => {
+    const frame = document.getElementById("demo");
+    const scheme = matchMedia("(prefers-color-scheme: dark)");
+    const load = () => { frame.src = `demo/?embed=1&lang=en&theme=${scheme.matches ? "dark" : "light"}`; };
+    frame.addEventListener("load", () => {
+      const box = frame.contentDocument && frame.contentDocument.querySelector(".container");
+      if (!box) return;
+      const fit = () => { frame.style.height = `${Math.ceil(box.getBoundingClientRect().height)}px`; };
+      new ResizeObserver(fit).observe(box);
+      fit();
+    });
+    scheme.addEventListener("change", load);
+    load();
+  })();
+</script>
+<!-- Visit counts: GoatCounter, no cookies or personal data. The script is a fixed version, pinned by its hash. -->
+<script data-goatcounter="https://dortizesquivel.goatcounter.com/count" async src="https://gc.zgo.at/count.v5.js" crossorigin="anonymous" integrity="sha384-atnOLvQb9t+jTSipvd75X2yginT4PjVbqDdlJAmxMm+wYElFmeR6EmLP5bYeoRVQ"></script>
+</body>
+</html>
