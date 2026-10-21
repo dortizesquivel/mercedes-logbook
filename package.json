@@ -1,0 +1,26 @@
+{
+  "name": "mercedes-logbook",
+  "description": "Tooling for the Mercedes Trips card: the vendored Leaflet, linting and browser tests",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dortizesquivel/mercedes-logbook.git"
+  },
+  "scripts": {
+    "lint": "eslint . --max-warnings 0",
+    "test": "playwright test",
+    "demo": "node scripts/serve.mjs 8765",
+    "check:vendor": "node scripts/check-vendor.mjs"
+  },
+  "dependencies": {
+    "leaflet": "1.9.4"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@playwright/test": "1.63.0",
+    "eslint": "10.11.0",
+    "globals": "17.12.0"
+  }
+}

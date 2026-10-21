@@ -83,7 +83,7 @@ function _setLanguage(lang) {
   try {
     // An unknown tag would make every toLocaleString() call throw.
     _locale = Intl.DateTimeFormat.supportedLocalesOf(lang || "en")[0] || "en";
-  } catch (_) {
+  } catch {
     _locale = "en";
   }
   _strings = STRINGS[_locale.split("-")[0].toLowerCase()] || STRINGS.en;
@@ -1100,7 +1100,7 @@ class MercedesTripsCard extends HTMLElement {
     });
 
     if (bounds) {
-      try { this._map.fitBounds(bounds, { padding: [20, 20] }); } catch(_) {}
+      try { this._map.fitBounds(bounds, { padding: [20, 20] }); } catch { /* keep the current view */ }
     }
 
     this._applyMapSelection();
@@ -1257,7 +1257,7 @@ class MercedesTripsCard extends HTMLElement {
     ].filter(Boolean);
     const bounds = pts.length >= 2 ? pts : fallback;
     if (bounds.length > 0) {
-      try { this._map.fitBounds(this._L.latLngBounds(bounds), { padding: [30, 30], maxZoom: 14 }); } catch(_) {}
+      try { this._map.fitBounds(this._L.latLngBounds(bounds), { padding: [30, 30], maxZoom: 14 }); } catch { /* keep the current view */ }
     }
   }
 
